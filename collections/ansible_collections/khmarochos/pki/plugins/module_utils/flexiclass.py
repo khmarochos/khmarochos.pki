@@ -1,10 +1,6 @@
 from contextlib import contextmanager
-import re
 from enum import Enum
-
-import q
-import jsons
-from types import NoneType
+import re
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
     UnknownProperty, \
@@ -30,10 +26,13 @@ class FlexiClass:
     # The default property settings
     DEFAULT_PROPERTY_SETTINGS = {
         'mandatory': False,
+        'mandatory_unless': None,
+        'mandatory_unless_any': [],
+        'mandatory_unless_all': [],
         'default': None,
         'readonly': True,
         'interpolate': InterpolatorBehaviour.NEVER,
-        'type': NoneType,
+        'type': type(None),
         'omit_if_none': False,
         'omit_if_empty': False,
         'omit': False,
@@ -91,14 +90,43 @@ class FlexiClass:
 
         # Check for the mandatory parameters, assign the default values.
         for property_name, property_configuration in self._class_properties.items():
-            if property_name != FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY and getattr(self, property_name) is None:
-                # Check for mandatory parameters
-                if 'mandatory' in property_configuration and property_configuration['mandatory']:
-                    raise MandatoryPropertyUnset(f"The {property_name} property is mandatory but is unset")
-                # Assign default values
-                if property_name not in self._object_parameters and 'default' in property_configuration:
-                    with self._ignore_readonly(property_name):
-                        setattr(self, property_name, property_configuration['default'])
+            # Skip the default property settings dictionary
+            if property_name == FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY:
+                continue
+            # Check for mandatory parameters
+            if getattr(self, property_name) is None:
+                to_check = []
+                if property_configuration['mandatory']:
+                    to_check.append({'name': property_name, 'sufficient': False})
+                if property_configuration['mandatory_unless']:
+                    to_check.append({'name': property_configuration['mandatory_unless'], 'sufficient': False})
+                if property_configuration['mandatory_unless_all']:
+                    to_check.append({'name': property_to_check, 'sufficient': False}
+                                    for property_to_check in property_configuration['mandatory_unless_all'])
+                # Remember that all checks of "sufficient" properties MUST be performed only at the end, so that's
+                # crucial to append them to the end of the list!
+                if property_configuration['mandatory_unless_any']:
+                    to_check.append({'name': property_to_check, 'sufficient': True}
+                                    for property_to_check in property_configuration['mandatory_unless_any'])
+                failed = False
+                for property_to_check in to_check:
+                    if not property_to_check['sufficient']:
+                        if getattr(self, property_to_check['name']) is None:
+                            failed = True
+                            break
+                    # The "sufficient" properties are being checked only after all the "non-sufficient" checks
+                    # are passed, so we suppose that the check is failed by default.
+                    else:
+                        failed = True
+                        if getattr(self, property_to_check['name']) is not None:
+                            failed = False
+                            break
+                if failed:
+                    raise MandatoryPropertyUnset(f"The {property_name} is not set")
+            # Assign default values
+            if property_name not in self._object_parameters and 'default' in property_configuration:
+                with self._ignore_readonly(property_name):
+                    setattr(self, property_name, property_configuration['default'])
 
     def __init_subclass__(cls, properties: dict, **kwargs):
 
@@ -167,7 +195,7 @@ class FlexiClass:
         def fset_default(self, value):
             if property_settings['mandatory'] and value is None:
                 raise MandatoryPropertyUnset(f"The {property} property is mandatory but is unset")
-            elif not isinstance(value, (property_settings['type'], NoneType)):
+            elif not isinstance(value, (property_settings['type'], type(None))):
                 raise TypeError(f"The {property} property must be of type {self._class_properties[property]['type']}, "
                                 f"not {type(value)}")
             elif property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_SET:

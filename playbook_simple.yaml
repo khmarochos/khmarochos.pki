@@ -1,53 +1,8 @@
 - name: Example playbook
   hosts:
     - localhost
-  vars:
-    pki_ca_cascade:
-      __propagated:
-        global_root_directory: "/tmp/pki"
-        domain: "k0.z0.r0.infra.d.kloudster.net"
-        certificate_subject_country: PL
-        certificate_subject_state_or_province: Malopolskie
-        certificate_subject_locality: Krakow
-        certificate_subject_organization: TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA
-        certificate_subject_organizational_unit: Security Service
-        certificate_subject_email_address: security@kloudster.net
-        key_passphrase_random: true
-      root:
-        __parameters:
-          name: Root Certificate Authority (${domain})
-          key_encrypted: true
-          key_size: 4096
-          strict: false
-          stubby: false
-        intermediate:
-          __parameters:
-            default: true
-            name: Intermediate Certificate Authority (${domain})
-            key_encrypted: true
-            key_size: 2048
-            strict: false
-            stubby: false
-          pfsense:
-            __parameters:
-              name: pfSense Router Certificate Authority (${domain})
-              key_encrypted: false
-              key_size: 2048
-              strict: true
-        elastic:
-          __parameters:
-            name: Elastic Certificate Authority (${domain})
-            key_encrypted: false
-            key_size: 2048
-            strict: false
-            stubby: false
-      kubernetes:
-        __parameters:
-          name: Kubernetes Cluster Certificate Authority (${domain})
-          key_encrypted: false
-          key_size: 2048
-          strict: false
-          stubby: false
+  vars_files:
+    - vars/test-case-full.yaml
   tasks:
     - name: Use module from collection source
       khmarochos.pki.init_dictionary:
