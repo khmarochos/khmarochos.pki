@@ -30,7 +30,7 @@ class CertificateSigningRequest(FlexiClass, properties={
     'subject_common_name': {'mandatory': True},
     'key': {'type': Key},
     'key_llo': {'type': rsa.RSAPrivateKey},
-    'key_file': {},
+    'key_file': {'mandatory_unless': 'key'},
     'key_size': {'type': int, 'default': Constants.DEFAULT_KEY_SIZE},
     'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_KEY_PUBLIC_EXPONENT},
     'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_KEY_ENCRYPTED},
@@ -43,8 +43,28 @@ class CertificateSigningRequest(FlexiClass, properties={
 }):
 
     def __init__(self, **kwargs):
+
         super().__init__(**kwargs)
 
-    def setup(self):
-        if path.exists(self.file) and not self.force:
-            self._load()
+        property_bindings = {
+            'llo': 'key_llo',
+            'file': 'key_file',
+            'size': 'key_size',
+            'public_exponent': 'key_public_exponent',
+            'encrypted': 'key_encrypted',
+            'passphrase': 'key_passphrase',
+            'passphrase_value': 'key_passphrase_value',
+            'passphrase_file': 'key_passphrase_file',
+            'passphrase_random': 'key_passphrase_random',
+            'passphrase_length': 'key_passphrase_length',
+            'passphrase_character_set': 'key_passphrase_character_set',
+        }
+
+        if self.key is None:
+            with self.ignore_readonly('key'):
+                self.key = Key(** self._bind_arguments(property_bindings))
+
+        self._bind_properties([{
+            'object': self.key,
+            'properties': property_bindings
+        }])

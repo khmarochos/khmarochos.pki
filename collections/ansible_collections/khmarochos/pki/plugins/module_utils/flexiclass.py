@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from enum import Enum
 import re
+import q
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
     UnknownProperty, \
@@ -13,18 +14,21 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
 
 # noinspection PyCompatibility
 class FlexiClass:
-
     # Define the options of the interpolator's behaviour
     class InterpolatorBehaviour(Enum):
         NEVER = 0,
         ON_SET = 1,
         ON_GET = 2,
 
+    # ...
+    _class_properties = {}
+
     # The name of the pseudo-property that contains the default property settings
     DEFAULT_PROPERTY_SETTINGS_KEY = '__default__'
 
     # The default property settings
     DEFAULT_PROPERTY_SETTINGS = {
+        'type': type(None),
         'mandatory': False,
         'mandatory_unless': None,
         'mandatory_unless_any': [],
@@ -32,16 +36,14 @@ class FlexiClass:
         'default': None,
         'readonly': True,
         'interpolate': InterpolatorBehaviour.NEVER,
-        'type': type(None),
+        'omit': False,
         'omit_if_none': False,
         'omit_if_empty': False,
-        'omit': False,
         'fget': None,
-        'fset': None
+        'fset': None,
+        'fdel': None,
+        'fdoc': None,
     }
-
-    # ...
-    _class_properties = {}
 
     # Compile the regular expression needed for the interpolator
     INTERPOLATOR_REGEX = re.compile(r'\$(?P<left_brace>{?)(?P<property>\w+)(?P<right_brace>}?)')
@@ -57,12 +59,15 @@ class FlexiClass:
 
         # Initialize the object's parameters
         self._object_parameters = {}
+        self._property_bindings = {}
+
+        q(self, id(self), self._class_properties, self._object_parameters, self._property_bindings)
 
         # Initialize the interpolator's breadcrumbs' stack
         self._interpolator_breadcrumbs = []
 
         # The properties that temporarily could be modified even if they are read-only. This list is used by the
-        # `_ignore_readonly` context: it'll add the property name to this list when we need to modify a read-only
+        # `ignore_readonly` context: it'll add the property name to this list when we need to modify a read-only
         # property.
         self._readonly_ignored = []
 
@@ -85,7 +90,7 @@ class FlexiClass:
         for property_name, property_value in kwargs.items():
             if property_name not in self._class_properties:
                 raise UnknownProperty(f"The {property_name} property is unknown")
-            with self._ignore_readonly(property_name):
+            with self.ignore_readonly(property_name):
                 setattr(self, property_name, property_value)
 
         # Check for the mandatory parameters, assign the default values.
@@ -100,14 +105,12 @@ class FlexiClass:
                     to_check.append({'name': property_name, 'sufficient': False})
                 if property_configuration['mandatory_unless']:
                     to_check.append({'name': property_configuration['mandatory_unless'], 'sufficient': False})
-                if property_configuration['mandatory_unless_all']:
-                    to_check.append({'name': property_to_check, 'sufficient': False}
-                                    for property_to_check in property_configuration['mandatory_unless_all'])
+                for property_to_check in property_configuration['mandatory_unless_all']:
+                    to_check.append({'name': property_to_check, 'sufficient': False})
                 # Remember that all checks of "sufficient" properties MUST be performed only at the end, so that's
                 # crucial to append them to the end of the list!
-                if property_configuration['mandatory_unless_any']:
-                    to_check.append({'name': property_to_check, 'sufficient': True}
-                                    for property_to_check in property_configuration['mandatory_unless_any'])
+                for property_to_check in property_configuration['mandatory_unless_any']:
+                    to_check.append({'name': property_to_check, 'sufficient': True})
                 failed = False
                 for property_to_check in to_check:
                     if not property_to_check['sufficient']:
@@ -122,10 +125,10 @@ class FlexiClass:
                             failed = False
                             break
                 if failed:
-                    raise MandatoryPropertyUnset(f"The {property_name} is not set")
+                    raise MandatoryPropertyUnset(f"The {property_name} is not set ({to_check})")
             # Assign default values
             if property_name not in self._object_parameters and 'default' in property_configuration:
-                with self._ignore_readonly(property_name):
+                with self.ignore_readonly(property_name):
                     setattr(self, property_name, property_configuration['default'])
 
     def __init_subclass__(cls, properties: dict, **kwargs):
@@ -150,17 +153,6 @@ class FlexiClass:
 
         super().__init_subclass__(**kwargs)
 
-    # This method is called in a temporary context when we need to set a read-only property's value.
-    @contextmanager
-    def _ignore_readonly(self, property_name: str):
-        if property_name not in self._class_properties:
-            raise UnknownProperty(f"The {property_name} property is unknown")
-        self._readonly_ignored.append(property_name)
-        try:
-            yield
-        finally:
-            self._readonly_ignored.remove(property_name)
-
     def _create_properties(self, property_name: str):
         fget = self._create_fget(property_name)
         fset = self._create_fset(property_name)
@@ -171,57 +163,59 @@ class FlexiClass:
 
     def _create_fget(self, property: str):
 
-        property_settings = self._class_properties[property]
+        property_settings = self.__class__._class_properties[property]
 
-        def fget_default(self):
-            if property not in self._object_parameters:
+        def _fget(myself):
+            if callable(property_settings['fget']):
+                q(myself, id(myself), property, 'CALLABLE')
+                return property_settings['fget']()
+            elif property not in myself._object_parameters:
+                q(myself, id(myself), property, 'NONE')
                 return None
             elif property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_GET:
-                return self._interpolator(self._object_parameters[property])
+                q(myself, id(myself), property, 'INTERPOLATED')
+                return myself._interpolator(myself._object_parameters[property])
             else:
-                return self._object_parameters[property]
+                q(myself, id(myself), property, 'AZIZ')
+                return myself._object_parameters[property]
 
-        if callable(property_settings['fget']):
-            fget = property_settings['fget']
-        else:
-            fget = fget_default
+        return _fget
 
-        return fget
+    def _create_fset(self, property_name: str):
 
-    def _create_fset(self, property: str):
+        property_settings = self.__class__._class_properties[property_name]
 
-        property_settings = self._class_properties[property]
+        def _fset(myself, value):
 
-        def fset_default(self, value):
-            if property_settings['mandatory'] and value is None:
-                raise MandatoryPropertyUnset(f"The {property} property is mandatory but is unset")
+            # if property_name == 'subject_country':
+            #     q(self, myself, self._property_bindings, property_name, value, property_settings)
+
+            if property_settings['readonly'] and property_name not in myself._readonly_ignored:
+                raise ReadOnlyProperty(f"The {property_name} property of {myself.__class__.__name__} is readonly")
+            elif property_settings['mandatory'] and value is None:
+                raise MandatoryPropertyUnset(f"The {property_name} property is mandatory but is unset")
             elif not isinstance(value, (property_settings['type'], type(None))):
-                raise TypeError(f"The {property} property must be of type {self._class_properties[property]['type']}, "
-                                f"not {type(value)}")
+                raise TypeError(
+                    f"The {property_name} property must be of type {myself._class_properties[property_name]['type']}, "
+                    f"not {type(value)}")
             elif property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_SET:
-                self._object_parameters[property] = self._interpolator(value)
+                value = myself._interpolator(value)
+
+            if property_name in myself._property_bindings:
+                backend_object = myself._property_bindings[property_name]['object']
+                backend_property = myself._property_bindings[property_name]['property']
+                with backend_object.ignore_readonly(backend_property):
+                    setattr(backend_object, backend_property, value)
+            elif callable(property_settings['fset']):
+                property_settings['fset'](value)
             else:
-                self._object_parameters[property] = value
+                myself._object_parameters[property_name] = value
 
-        def fset_default_readonly(self, value):
-            if property in self._readonly_ignored:
-                fset_default(self, value)
-            else:
-                raise ReadOnlyProperty(f"The {property} property is readonly")
-
-        if callable(property_settings['fset']):
-            fset = property_settings['fset']
-        elif property_settings['readonly']:
-            fset = fset_default_readonly
-        else:
-            fset = fset_default
-
-        return fset
+        return _fset
 
     def _interpolator(self, string: str):
 
         def call_getter(match: re.Match):
-
             if bool(match.group('left_brace')) != bool(match.group('right_brace')):
                 raise UnbalancedBraces(f"Unbalanced curly braces in {match.string}")
             if match.group('property') not in self._class_properties:
@@ -243,9 +237,40 @@ class FlexiClass:
         string = string.replace(FlexiClass.INTERPOLATOR_RESERVED_CHARACTER, '$$')
         return string
 
+    def _bind_properties(self, target_objects: list):
+        for target_object in target_objects:
+            object = target_object['object']
+            for property_backend, property_frontend in target_object['properties'].items():
+                if property_frontend not in self._class_properties:
+                    raise UnknownProperty(f"The {property_frontend} property is unknown for {self.__class__.__name__}")
+                if property_backend not in object._class_properties:
+                    raise UnknownProperty(f"The {property_backend} property is unknown for {object.__class__.__name__}")
+                self._property_bindings[property_frontend] = {
+                    'object': object,
+                    'property': property_backend
+                }
+
+    def _bind_arguments(self, property_bindings):
+        return {
+            property_backend: getattr(self, property_frontend)
+            for property_backend, property_frontend in property_bindings.items()
+        }
+
     #
     # PUBLIC METHODS
     #
+
+    # This method is called in a temporary context when we need to set a read-only property's value.
+    @contextmanager
+    def ignore_readonly(self, property_name: str):
+        if property_name not in self._class_properties:
+            raise UnknownProperty(f"The {property_name} property is unknown")
+        self._readonly_ignored.append(property_name)
+        try:
+            yield
+        finally:
+            self._readonly_ignored.remove(property_name)
+
     def get_property(self, field_name: str):
         field_value = getattr(self, field_name)
         if isinstance(field_value, FlexiClass):

@@ -1,12 +1,13 @@
 import os.path
-import string
+import q
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
+    CertificateSigningRequest
 from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
@@ -15,40 +16,40 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import P
 class PKICA(FlexiClass, properties={
     # default parameters for parameters' definitions
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
+        'type': str,
         'mandatory': False,
         'default': None,
         'readonly': True,
         'interpolate': FlexiClass.InterpolatorBehaviour.ON_SET,
-        'type': str
     },
     # global parameters
     'nickname': {'mandatory': True},
     'name': {'default': '${nickname} Certificate Authority'},
     'parent_nickname': {'readonly': True},
-    'default': {'default': False, 'type': bool},
+    'default': {'type': bool, 'default': False},
     'domain': {'mandatory': True},
-    'strict': {'default': False, 'type': bool},
-    'stubby': {'default': False, 'type': bool},
+    'strict': {'type': bool, 'default': False},
+    'stubby': {'type': bool, 'default': False},
     # CA key parameters
     'key': {'type': Key},
-    'key_llo': {'default': None, 'type': rsa.RSAPrivateKey},
-    'key_size': {'default': 4096, 'type': int},
-    'key_public_exponent': {'default': 65537, 'type': int},
-    'key_encrypted': {'default': False, 'type': bool},
-    'key_passphrase': {'default': None, 'type': Passphrase},
-    'key_passphrase_value': {'default': None, 'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
-    'key_passphrase_random': {'default': False, 'type': bool},
-    'key_passphrase_length': {'default': 32, 'type': int},
-    'key_passphrase_character_set': {'default': string.ascii_letters + string.digits + string.punctuation},
+    'key_llo': {'type': rsa.RSAPrivateKey},
+    'key_size': {'type': int, 'default': Constants.DEFAULT_KEY_SIZE},
+    'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_KEY_PUBLIC_EXPONENT},
+    'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_KEY_ENCRYPTED},
+    'key_passphrase': {'type': Passphrase},
+    'key_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
+    'key_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
+    'key_passphrase_length': {'type': int, 'default': Constants.DEFAULT_PASSPHRASE_LENGTH},
+    'key_passphrase_character_set': {'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET},
     # CA keystore parameters
-    'keystore_passphrase': {'default': None, 'type': Passphrase},
-    'keystore_passphrase_value': {'default': None, 'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
-    'keystore_passphrase_random': {'default': False, 'type': bool},
-    'keystore_passphrase_length': {'type': int, 'default': 32},
-    'keystore_passphrase_character_set': {'default': string.ascii_letters + string.digits + string.punctuation},
+    'keystore_passphrase': {'type': Passphrase},
+    'keystore_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
+    'keystore_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
+    'keystore_passphrase_length': {'type': int, 'default': Constants.DEFAULT_PASSPHRASE_LENGTH},
+    'keystore_passphrase_character_set': {'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET},
     # CA certificate parameters
     'certificate_signing_request': {'type': CertificateSigningRequest},
-    'certificate_signing_request_llo': {'default': None, 'type': x509.CertificateSigningRequest},
+    'certificate_signing_request_llo': {'type': x509.CertificateSigningRequest},
     'certificate': {'type': Certificate},
     'certificate_llo': {'type': x509.Certificate},
     'certificate_term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
@@ -106,11 +107,47 @@ class PKICA(FlexiClass, properties={
 }):
 
     def __init__(self, **kwargs):
+
+        q('*** NEW PKICA ***', self, kwargs)
+
         super().__init__(**kwargs)
+
+        property_bindings = {
+            'file': 'certificate_file',
+            'llo': 'certificate_llo',
+            'term': 'certificate_term',
+            'subject_country': 'certificate_subject_country',
+            'subject_state_or_province': 'certificate_subject_state_or_province',
+            'subject_locality': 'certificate_subject_locality',
+            'subject_organization': 'certificate_subject_organization',
+            'subject_organizational_unit': 'certificate_subject_organizational_unit',
+            'subject_email_address': 'certificate_subject_email_address',
+            'subject_common_name': 'certificate_subject_common_name',
+            'key': 'key',
+            'key_llo': 'key_llo',
+            'key_file': 'key_file',
+            'key_size': 'key_size',
+            'key_public_exponent': 'key_public_exponent',
+            'key_passphrase': 'key_passphrase',
+            'key_passphrase_file': 'key_passphrase_file',
+            # 'keystore_file': 'keystore_file',
+            # 'keystore_passphrase': 'keystore_passphrase',
+            # 'keystore_passphrase_file': 'keystore_passphrase_file',
+            'certificate_signing_request_file': 'certificate_signing_request_file',
+        }
+
+        if self.certificate is None:
+            with self.ignore_readonly('certificate'):
+                self.certificate = Certificate(** self._bind_arguments(property_bindings))
+
+        self._bind_properties([{
+            'object': self.certificate,
+            'properties': property_bindings,
+        }])
 
     def setup(self):
         self.setup_directories()
-        self.setup_certificate()
+
 
     def setup_directories(self):
         for directory, mode in {
@@ -128,32 +165,3 @@ class PKICA(FlexiClass, properties={
             else:
                 os.makedirs(directory, mode=mode)
 
-    def setup_certificate(self):
-        if self.certificate is None:
-            with self._ignore_readonly('certificate'):
-                self.certificate = Certificate(
-                    file=self.certificate_file,
-                    llo=self.certificate_llo,
-                    term=self.certificate_term,
-                    subject_country=self.certificate_subject_country,
-                    subject_state_or_province=self.certificate_subject_state_or_province,
-                    subject_locality=self.certificate_subject_locality,
-                    subject_organization=self.certificate_subject_organization,
-                    subject_organizational_unit=self.certificate_subject_organizational_unit,
-                    subject_email_address=self.certificate_subject_email_address,
-                    subject_common_name=self.certificate_subject_common_name,
-                    key=self.key,
-                    key_llo=self.key_llo,
-                    key_size=self.key_size,
-                    key_public_exponent=self.key_public_exponent,
-                    key_encrypted=self.key_encrypted,
-                    key_passphrase=self.key_passphrase,
-                    key_passphrase_value=self.key_passphrase_value,
-                    key_passphrase_random=self.key_passphrase_random,
-                    key_passphrase_length=self.key_passphrase_length,
-                    key_passphrase_file=self.key_passphrase_file,
-                    certificate_signing_request=self.certificate_signing_request,
-                    certificate_signing_request_llo=self.certificate_signing_request_llo,
-                    certificate_signing_request_file=self.certificate_signing_request_file,
-                )
-        self.certificate.setup()

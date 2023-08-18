@@ -1,4 +1,5 @@
 import string
+import q
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 from os import path
@@ -30,7 +31,7 @@ class Certificate(FlexiClass, properties={
     'subject_common_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'key': {'type': Key},
     'key_llo': {'type': rsa.RSAPrivateKey},
-    'key_file': {'type': str},
+    'key_file': {'mandatory_unless_any': ['key', 'certificate_signing_request']},
     'key_size': {'type': int, 'default': Constants.DEFAULT_KEY_SIZE},
     'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_KEY_PUBLIC_EXPONENT},
     'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_KEY_ENCRYPTED},
@@ -46,29 +47,43 @@ class Certificate(FlexiClass, properties={
 }):
 
     def __init__(self, **kwargs):
+
         super().__init__(**kwargs)
 
-    def setup(self):
+        property_bindings = {
+            'file': 'certificate_signing_request_file',
+            'llo': 'certificate_signing_request_llo',
+            'subject_country': 'subject_country',
+            'subject_state_or_province': 'subject_state_or_province',
+            'subject_locality': 'subject_locality',
+            'subject_organization': 'subject_organization',
+            'subject_organizational_unit': 'subject_organizational_unit',
+            'subject_email_address': 'subject_email_address',
+            'subject_common_name': 'subject_common_name',
+            'key': 'key',
+            'key_llo': 'key_llo',
+            'key_file': 'key_file',
+            'key_size': 'key_size',
+            'key_public_exponent': 'key_public_exponent',
+            'key_encrypted': 'key_encrypted',
+            'key_passphrase': 'key_passphrase',
+            'key_passphrase_value': 'key_passphrase_value',
+            'key_passphrase_random': 'key_passphrase_random',
+            'key_passphrase_length': 'key_passphrase_length',
+            'key_passphrase_file': 'key_passphrase_file'
+        }
+
         if self.certificate_signing_request is None:
-            with self._ignore_readonly('certificate_signing_request'):
-                self.certificate_signing_request = CertificateSigningRequest(
-                    file=self.certificate_signing_request_file,
-                    llo=self.certificate_signing_request_llo,
-                    subject_country=self.subject_country,
-                    subject_state_or_province=self.subject_state_or_province,
-                    subject_locality=self.subject_locality,
-                    subject_organization=self.subject_organization,
-                    subject_organizational_unit=self.subject_organizational_unit,
-                    subject_email_address=self.subject_email_address,
-                    subject_common_name=self.subject_common_name,
-                    key=self.key,
-                    key_llo=self.key_llo,
-                    key_size=self.key_size,
-                    key_public_exponent=self.key_public_exponent,
-                    key_encrypted=self.key_encrypted,
-                    key_passphrase=self.key_passphrase,
-                    key_passphrase_value=self.key_passphrase_value,
-                    key_passphrase_random=self.key_passphrase_random,
-                    key_passphrase_length=self.key_passphrase_length,
-                    key_passphrase_file=self.key_passphrase_file,
-                )
+            with self.ignore_readonly('certificate_signing_request'):
+                self.certificate_signing_request = CertificateSigningRequest(** self._bind_arguments(property_bindings))
+
+        self._bind_properties([{
+            'object': self.certificate_signing_request,
+            'properties': property_bindings
+        }])
+
+    def setup(self):
+        pass
+
+
+

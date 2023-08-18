@@ -1,5 +1,6 @@
 import unittest
 import yaml
+import q
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade import PKICascade
@@ -15,10 +16,11 @@ class InitCascadeTest(unittest.TestCase):
         pki_ca_cascade = PKICascade(self.pki_ca_cascade_configuration)
         self.assertTrue(type(pki_ca_cascade), PKICascade)
 
-    def test_setup(self):
-        pki_cascade = PKICascade(self.pki_ca_cascade_configuration)
-        for pki_ca in pki_cascade.pki_cascade.values():
-            pki_ca.setup()
+    # def test_setup(self):
+    #     pki_cascade = PKICascade(self.pki_ca_cascade_configuration)
+    #     for pki_ca in pki_cascade.pki_cascade.values():
+    #         q(f"Setting up the {pki_ca.nickname} CA")
+    #         pki_ca.setup()
 
 
 if __name__ == '__main__':

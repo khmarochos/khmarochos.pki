@@ -24,7 +24,7 @@ class Passphrase(FlexiClass, properties={
             self._make()
 
     def _load(self):
-        with open(self.file, 'r') as f, self._ignore_readonly('passphrase'):
+        with open(self.file, 'r') as f, self.ignore_readonly('passphrase'):
             self.passphrase = f.read()
 
     def _save(self):
@@ -39,7 +39,7 @@ class Passphrase(FlexiClass, properties={
         self._save()
 
     def _generate(self):
-        with self._ignore_readonly('passphrase'):
+        with self.ignore_readonly('passphrase'):
             self.passphrase = ''.join(secrets.choice(self.character_set) for _ in range(self.length))
 
     def lookup(self) -> str:
