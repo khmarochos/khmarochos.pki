@@ -108,8 +108,6 @@ class PKICA(FlexiClass, properties={
 
     def __init__(self, **kwargs):
 
-        q('*** NEW PKICA ***', self, kwargs)
-
         super().__init__(**kwargs)
 
         property_bindings = {
