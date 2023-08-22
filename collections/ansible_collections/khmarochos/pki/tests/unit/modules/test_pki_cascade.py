@@ -1,7 +1,5 @@
 import unittest
 import yaml
-import q
-from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade import PKICascade
 
