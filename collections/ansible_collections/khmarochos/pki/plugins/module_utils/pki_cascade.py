@@ -55,7 +55,7 @@ class PKICascade(FlexiClass, properties={
             parameters.update(branch[PKICascade.PARAMETERS_KEY])
         # If this branch contains parameters of some CA, add the CA to the cascade
         if nickname is not None:
-            pki_ca = PKICA(nickname=nickname, parent_nickname=parent_nickname, **parameters)
+            pki_ca = PKICA(pki_cascade=self, nickname=nickname, parent_nickname=parent_nickname, **parameters)
             self.add_ca(pki_ca)
         # If there are branches, traverse them
         for child_nickname, child_branch in branch.items():

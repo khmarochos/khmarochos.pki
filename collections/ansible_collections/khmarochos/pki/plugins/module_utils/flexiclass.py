@@ -1,6 +1,9 @@
+import sys
 from contextlib import contextmanager
 from enum import Enum
 import re
+from pydoc import locate
+
 import q
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
@@ -52,10 +55,20 @@ class FlexiClass:
     INTERPOLATOR_RESERVED_CHARACTER = '\0'
 
     #
+    BUILTIN_TYPES = {
+        builtin_type_name: builtin_type
+        for builtin_type_name, builtin_type in (
+            dict(__builtins__) if isinstance(__builtins__, dict) else {__builtins__.__dict__}
+        ).items() if isinstance(builtin_type, type)
+    }
+
+    #
     # PRIVATE METHODS
     #
 
     def __init__(self, **kwargs):
+
+        # q(self, kwargs)
 
         # Initialize the object's parameters
         self._object_parameters = {}
@@ -135,6 +148,35 @@ class FlexiClass:
         property_assets = property(fget, fset)
         setattr(self.__class__, property_name, property_assets)
 
+    def _check_property_type(self, property_name: str, property_type, value, raise_exception: bool = True):
+
+        # As the `property_type` could be a string, we need to convert it to a class
+        if isinstance(property_type, str):
+            if '.' in property_type:
+                module_name, class_name = property_type.rsplit('.', 1)
+                module = sys.modules.get(module_name)
+                q(module)
+                if module:
+                    property_type = getattr(module, class_name)
+            else:
+                property_type = self.BUILTIN_TYPES.get(property_type)
+        elif isinstance(property_type, type):
+            pass
+        else:
+            raise TypeError(f"The {property_name} property type must be a class or a string representing a class name, "
+                            f"not {type(property_type)}")
+
+        # Now we're ready to check the type
+        q(property_type, value)
+        if not isinstance(value, (property_type, type(None))):
+            if raise_exception:
+                raise TypeError(
+                    f"The {property_name} property must be of type {property_type}, not {type(value)}")
+            else:
+                return False
+        else:
+            return True
+
     def _create_fget(self, property_name: str):
 
         property_settings = self.__class__._class_properties[property_name]
@@ -150,19 +192,21 @@ class FlexiClass:
                 value = getattr(backend_object, backend_property)
             elif callable(property_settings['fget']):
                 value = property_settings['fget']()
-            elif property_name not in myself._object_parameters:
+            elif property_name not in myself._class_properties:
                 raise UnknownProperty(f"The {property_name} property is unknown")
             else:
-                value = myself._object_parameters[property_name]
+                value = myself._object_parameters.get(property_name)
 
             # Interpolating variables
             if property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_GET:
                 value = myself._interpolator(value)
 
-            # Value checking
-            if not isinstance(value, (property_settings['type'], type(None))):
-                raise TypeError(
-                    f"The {property_name} property must be of type {property_settings['type']}, not {type(value)}")
+            # Type checking
+            self._check_property_type(
+                property_name=property_name,
+                property_type=property_settings['type'],
+                value=value
+            )
 
             return value
 
@@ -174,17 +218,18 @@ class FlexiClass:
 
         def _fset(myself, value):
 
-            q(f"Setting the {property_name} property of {myself} to {value}")
-
             # Value checking
             if value is None:
                 self.ensure_none_is_legit(property_name)
             elif property_settings['readonly'] and property_name not in myself._readonly_ignored:
                 raise ReadOnlyProperty(f"The {property_name} property of {myself.__class__.__name__} is readonly")
-            elif not isinstance(value, (property_settings['type'], type(None))):
-                raise TypeError(
-                    f"The {property_name} property must be of type {property_settings['type']}, not {type(value)}")
 
+            # Type checking
+            self._check_property_type(
+                property_name=property_name,
+                property_type=property_settings['type'],
+                value=value
+            )
             # Interpolating variables
             if property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_SET:
                 value = myself._interpolator(value)
@@ -311,3 +356,13 @@ class FlexiClass:
             raise MandatoryPropertyUnset(f"The {property_name} is not set ({to_check})")
         else:
             return not failed
+
+    # def load_or_save(self, property_name, force_save: bool = False, force_load: bool = False):
+    #     if getattr(self, property_name) is None or force_load:
+    #         try:
+    #             self.load()
+    #         except FileNotFoundError:
+    #             self.make()
+    #             force_save = True
+    #     if force_save:
+    #         self.save()

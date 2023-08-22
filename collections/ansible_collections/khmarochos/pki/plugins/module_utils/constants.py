@@ -1,4 +1,12 @@
 import string
+import enum
+
+
+class CertificateTypes(enum.Enum):
+    CA_STUBBY = 'ca_stubby'
+    CA_INTERMEDIATE = 'ca_intermediate'
+    SERVER = 'server'
+    CLIENT = 'client'
 
 
 class Constants:
@@ -9,3 +17,4 @@ class Constants:
     DEFAULT_PASSPHRASE_LENGTH = 32
     DEFAULT_PASSPHRASE_CHARACTER_SET = string.ascii_letters + string.digits + string.punctuation
     DEFAULT_PASSPHRASE_RANDOM = False
+

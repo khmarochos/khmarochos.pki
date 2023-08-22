@@ -1,9 +1,9 @@
 import os.path
-import q
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
@@ -22,6 +22,8 @@ class PKICA(FlexiClass, properties={
         'readonly': True,
         'interpolate': FlexiClass.InterpolatorBehaviour.ON_SET,
     },
+    # PKICascade
+    'pki_cascade': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade.PKICascade', 'mandatory': True},
     # global parameters
     'nickname': {'mandatory': True},
     'name': {'default': '${nickname} Certificate Authority'},
@@ -126,8 +128,13 @@ class PKICA(FlexiClass, properties={
             'key_file': 'key_file',
             'key_size': 'key_size',
             'key_public_exponent': 'key_public_exponent',
+            'key_encrypted': 'key_encrypted',
             'key_passphrase': 'key_passphrase',
             'key_passphrase_file': 'key_passphrase_file',
+            'key_passphrase_value': 'key_passphrase_value',
+            'key_passphrase_random': 'key_passphrase_random',
+            'key_passphrase_length': 'key_passphrase_length',
+            'key_passphrase_character_set': 'key_passphrase_character_set',
             # 'keystore_file': 'keystore_file',
             # 'keystore_passphrase': 'keystore_passphrase',
             # 'keystore_passphrase_file': 'keystore_passphrase_file',
@@ -136,7 +143,11 @@ class PKICA(FlexiClass, properties={
 
         if self.certificate is None:
             with self.ignore_readonly('certificate'):
-                self.certificate = Certificate(** self._bind_arguments(property_bindings))
+                self.certificate = Certificate(
+                    type=CertificateTypes.CA_STUBBY if self.stubby else CertificateTypes.CA_INTERMEDIATE,
+                    ca=self.pki_cascade.get_ca(self.parent_nickname) if self.parent_nickname is not None else None,
+                    ** self._bind_arguments(property_bindings),
+                )
 
         self._bind_properties([{
             'object': self.certificate,
@@ -145,7 +156,10 @@ class PKICA(FlexiClass, properties={
 
     def setup(self):
         self.setup_directories()
-
+        self.certificate.certificate_signing_request.key.passphrase.setup()
+        self.certificate.certificate_signing_request.key.setup()
+        self.certificate.certificate_signing_request.setup()
+        self.certificate.setup()
 
     def setup_directories(self):
         for directory, mode in {
@@ -162,4 +176,3 @@ class PKICA(FlexiClass, properties={
                     raise Exception(f"Path '{directory}' exists but has wrong permissions")
             else:
                 os.makedirs(directory, mode=mode)
-
