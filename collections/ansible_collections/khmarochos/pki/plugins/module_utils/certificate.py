@@ -14,16 +14,19 @@
 
 
 import datetime
+import os
+import q
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
-from os import path
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateExtensionPurposes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
+    CertificateSigningRequest
 from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
@@ -38,6 +41,7 @@ class Certificate(FlexiClass, properties={
     },
     'llo': {'type': x509.Certificate},
     'file': {'mandatory': True},
+    'chain_file': {'mandatory': True},
     'type': {'type': CertificateTypes, 'mandatory': True},
     'term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
     'ca': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade.PKICA'},
@@ -49,7 +53,8 @@ class Certificate(FlexiClass, properties={
     'subject_email_address': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'subject_common_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'subject': {'type': x509.name.Name},
-    'attributes': {'type': list},
+    'alternative_names': {'type': list},
+    'extensions': {'type': list},
     'key': {'type': Key},
     'key_llo': {'type': rsa.RSAPrivateKey},
     'key_file': {'mandatory_unless_any': ['key', 'certificate_signing_request']},
@@ -83,7 +88,8 @@ class Certificate(FlexiClass, properties={
             'subject_email_address': 'subject_email_address',
             'subject_common_name': 'subject_common_name',
             'subject': 'subject',
-            'attributes': 'attributes',
+            'alternative_names': 'alternative_names',
+            'extensions': 'extensions',
             'key': 'key',
             'key_llo': 'key_llo',
             'key_file': 'key_file',
@@ -99,13 +105,12 @@ class Certificate(FlexiClass, properties={
 
         if self.certificate_signing_request is None:
             with self.ignore_readonly('certificate_signing_request'):
-                self.certificate_signing_request = CertificateSigningRequest(** self._bind_arguments(property_bindings))
+                self.certificate_signing_request = CertificateSigningRequest(**self._bind_arguments(property_bindings))
 
         self._bind_properties([{
             'object': self.certificate_signing_request,
             'properties': property_bindings
         }])
-
 
     def setup(self):
         self.setup_llo()
@@ -120,25 +125,42 @@ class Certificate(FlexiClass, properties={
                 generated = True
         if generated or force_save:
             self.save_llo()
+            self.save_chain()
 
     def load_llo(self):
         with open(self.file, 'rb') as f, self.ignore_readonly('llo'):
             self.llo = x509.load_pem_x509_certificate(f.read())
 
     def make_llo(self):
-        with ((self.ignore_readonly('llo'))):
-            self.llo = x509.CertificateBuilder() \
-                .subject_name(self.subject) \
-                .issuer_name(self.ca.certificate.subject if self.ca is not None else self.subject) \
-                .public_key(self.key.llo.public_key()) \
-                .serial_number(x509.random_serial_number()) \
-                .not_valid_before(datetime.datetime.utcnow()) \
-                .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=self.term)) \
-                .sign(
-                    private_key=self.ca.key.llo if self.ca is not None else self.key.llo,
-                    algorithm=hashes.SHA256()
-                )
+        certificate_builder = x509.CertificateBuilder() \
+            .subject_name(self.subject) \
+            .issuer_name(self.ca.certificate.subject if self.ca is not None else self.subject) \
+            .public_key(self.key.llo.public_key()) \
+            .serial_number(x509.random_serial_number()) \
+            .not_valid_before(datetime.datetime.utcnow()) \
+            .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=self.term))
+        for extension in self.extensions:
+            certificate_builder = certificate_builder.add_extension(
+                extension['extension'],
+                extension['critical']
+            )
+        with self.ignore_readonly('llo'):
+            self.llo = certificate_builder.sign(
+                private_key=self.ca.key.llo if self.ca is not None else self.key.llo,
+                algorithm=hashes.SHA256()
+            )
 
     def save_llo(self):
         with open(self.file, 'wb') as f:
-            f.write(self.llo.public_bytes(encoding=serialization.Encoding.PEM))
+            f.write(self.get_pem())
+
+    def save_chain(self):
+        with open(self.chain_file, 'wb') as f:
+            f.write(self.get_pem_chain())
+
+    def get_pem_chain(self):
+        return self.get_pem() + \
+               self.ca.certificate.get_pem_chain() if self.ca is not None else b''
+
+    def get_pem(self):
+        return self.llo.public_bytes(encoding=serialization.Encoding.PEM)

@@ -91,6 +91,7 @@ class PKICA(FlexiClass, properties={
     'keystore_passphrase_file_suffix': {'default': '.keystore_passphrase'},
     'certificate_signing_request_file_suffix': {'default': '.csr'},
     'certificate_file_suffix': {'default': '.crt'},
+    'certificate_chain_file_suffix': {'default': '.chain.crt'},
     # filenames
     'openssl_configuration_file': {
         'default':
@@ -119,7 +120,11 @@ class PKICA(FlexiClass, properties={
     'certificate_file': {
         'default':
             '${certificates_directory}/${ca_file_prefix}${certificate_file_suffix}'
-    }
+    },
+    'certificate_chain_file': {
+        'default':
+            '${certificates_directory}/${ca_file_prefix}${certificate_chain_file_suffix}'
+    },
 }):
 
     def __init__(self, **kwargs):
@@ -128,6 +133,7 @@ class PKICA(FlexiClass, properties={
 
         property_bindings = {
             'file': 'certificate_file',
+            'chain_file': 'certificate_chain_file',
             'llo': 'certificate_llo',
             'term': 'certificate_term',
             'subject_country': 'certificate_subject_country',
@@ -177,11 +183,16 @@ class PKICA(FlexiClass, properties={
 
     def setup_directories(self):
         for directory, mode in {
-            self.root_directory: 0o755,
-            self.private_directory: 0o700,
-            self.certificate_signing_requests_directory: 0o755,
-            self.certificates_directory: 0o755,
-            self.certificate_revocation_lists_directory: 0o755
+            self.root_directory:
+                Constants.DEFAULT_ROOT_DIRECTORY_MODE,
+            self.private_directory:
+                Constants.DEFAULT_PRIVATE_DIRECTORY_MODE,
+            self.certificate_signing_requests_directory:
+                Constants.DEFAULT_CERTIFICATE_SIGNING_REQUESTS_DIRECTORY_MODE,
+            self.certificates_directory:
+                Constants.DEFAULT_CERTIFICATES_DIRECTORY_MODE,
+            self.certificate_revocation_lists_directory:
+                Constants.DEFAULT_CERTIFICATE_REVOCATION_LISTS_DIRECTORY_MODE
         }.items():
             if os.path.exists(directory):
                 if not os.path.isdir(directory):

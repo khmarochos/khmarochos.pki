@@ -168,7 +168,6 @@ class FlexiClass:
             if '.' in property_type:
                 module_name, class_name = property_type.rsplit('.', 1)
                 module = sys.modules.get(module_name)
-                q(module)
                 if module:
                     property_type = getattr(module, class_name)
             else:
@@ -180,7 +179,6 @@ class FlexiClass:
                             f"not {type(property_type)}")
 
         # Now we're ready to check the type
-        q(property_type, value)
         if not isinstance(value, (property_type, type(None))):
             if raise_exception:
                 raise TypeError(
@@ -369,13 +367,3 @@ class FlexiClass:
             raise MandatoryPropertyUnset(f"The {property_name} is not set ({to_check})")
         else:
             return not failed
-
-    # def load_or_save(self, property_name, force_save: bool = False, force_load: bool = False):
-    #     if getattr(self, property_name) is None or force_load:
-    #         try:
-    #             self.load()
-    #         except FileNotFoundError:
-    #             self.make()
-    #             force_save = True
-    #     if force_save:
-    #         self.save()

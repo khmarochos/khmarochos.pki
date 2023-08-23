@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import q
+
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
@@ -19,6 +21,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateExtensionPurposes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
@@ -43,7 +46,8 @@ class CertificateSigningRequest(FlexiClass, properties={
     'subject_email_address': {'mandatory': True},
     'subject_common_name': {'mandatory': True},
     'subject': {'type': x509.name.Name},
-    'attributes': {'type': list},
+    'alternative_names': {'type': list},
+    'extensions': {'type': list},
     'key': {'type': Key},
     'key_llo': {'type': rsa.RSAPrivateKey},
     'key_file': {'mandatory_unless': 'key'},
@@ -111,22 +115,25 @@ class CertificateSigningRequest(FlexiClass, properties={
             with self.ignore_readonly('subject'):
                 self.subject = x509.Name(subject_name)
 
-        if self.attributes is None:
-            attributes = []
+        if self.extensions is None:
+            with self.ignore_readonly('extensions'):
+                self.extensions = []
             if self.type == CertificateTypes.CA_STUBBY:
-                attributes.append(
-                    x509.Extension(x509.oid.ExtensionOID.BASIC_CONSTRAINTS,
-                                   True,
-                                   x509.BasicConstraints(ca=True, path_length=0)))
+                self.extensions.append(
+                    {
+                        'purpose': CertificateExtensionPurposes.CA,
+                        'critical': True,
+                        'extension': x509.BasicConstraints(ca=True, path_length=0)
+                    }
+                )
             elif self.type == CertificateTypes.CA_INTERMEDIATE:
-                attributes.append(
-                    x509.Extension(x509.oid.ExtensionOID.BASIC_CONSTRAINTS,
-                                   True,
-                                   x509.BasicConstraints(ca=True, path_length=None)))
-            with self.ignore_readonly('attributes'):
-                self.attributes = attributes
-
-
+                self.extensions.append(
+                    {
+                        'purpose': CertificateExtensionPurposes.CA,
+                        'critical': True,
+                        'extension': x509.BasicConstraints(ca=True, path_length=None)
+                    }
+                )
     def setup(self):
         self.setup_llo()
 
@@ -146,15 +153,22 @@ class CertificateSigningRequest(FlexiClass, properties={
             self.llo = x509.load_pem_x509_csr(f.read())
 
     def make_llo(self):
+        certificate_signing_request_builder = x509.CertificateSigningRequestBuilder()
+        certificate_signing_request_builder = certificate_signing_request_builder.subject_name(self.subject)
+        for extension in self.extensions:
+            certificate_signing_request_builder = certificate_signing_request_builder.add_extension(
+                extension['extension'],
+                extension['critical']
+            )
         with self.ignore_readonly('llo'):
-            self.llo = x509.CertificateSigningRequestBuilder(
-                subject_name=x509.Name(self.subject),
-                # attributes=self.attributes
-            ).sign(
+            self.llo = certificate_signing_request_builder.sign(
                 private_key=self.key.llo,
                 algorithm=hashes.SHA256()
             )
 
     def save_llo(self):
         with open(self.file, 'wb') as f:
-            f.write(self.llo.public_bytes(serialization.Encoding.PEM))
+            f.write(self.get_pem())
+
+    def get_pem(self):
+        return self.llo.public_bytes(serialization.Encoding.PEM)

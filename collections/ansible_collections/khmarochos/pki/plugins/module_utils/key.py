@@ -98,8 +98,11 @@ class Key(FlexiClass, properties={
 
     def save_llo(self):
         with open(self.file, 'wb') as f:
-            f.write(self.llo.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=self.encryption_algorithm
-            ))
+            f.write(self.get_pem())
+
+    def get_pem(self):
+        return self.llo.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=self.encryption_algorithm
+        )

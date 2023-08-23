@@ -30,13 +30,14 @@ pki_ca_cascade:
           key_encrypted: false
           key_size: 2048
           strict: true
+          stubby: false
     elastic:
       __parameters:
         name: Elastic Certificate Authority (${domain})
         key_encrypted: false
         key_size: 2048
         strict: false
-        stubby: false
+        stubby: true
   kubernetes:
     __parameters:
       name: Kubernetes Cluster Certificate Authority (${domain})
