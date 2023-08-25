@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jsons
+import json
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca import PKICA
-from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import CANotFound, StructureError
 
 
@@ -89,5 +88,7 @@ class PKICascade(FlexiClass, properties={
             raise CANotFound(f"There is no such CA as {nickname}")
 
     def pki_cascade_json(self):
-        result = {nickname: pki_ca.get_properties() for nickname, pki_ca in self.pki_cascade.items()}
-        return jsons.dumps(result, indent=4, sort_keys=True)
+        result = {}
+        for nickname, pki_ca in self.pki_cascade.items():
+            result[nickname] = pki_ca.get_properties(builtins_only=True)
+        return json.dumps(result, sort_keys=True)

@@ -43,6 +43,5 @@ def main():
 
     module.exit_json(changed=False, result=pki_cascade.pki_cascade_json())
 
-
 if __name__ == '__main__':
     main()

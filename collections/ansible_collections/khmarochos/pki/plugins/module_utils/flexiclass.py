@@ -130,7 +130,6 @@ class FlexiClass:
             except UnknownProperty:
                 pass
 
-
     def __init_subclass__(cls, properties: dict, **kwargs):
 
         # Define the default property settings for the new class
@@ -164,29 +163,40 @@ class FlexiClass:
     def _check_property_type(self, property_name: str, property_type, value, raise_exception: bool = True):
 
         # As the `property_type` could be a string, we need to convert it to a class
-        if isinstance(property_type, str):
-            if '.' in property_type:
-                module_name, class_name = property_type.rsplit('.', 1)
-                module = sys.modules.get(module_name)
-                if module:
-                    property_type = getattr(module, class_name)
-            else:
-                property_type = self.BUILTIN_TYPES.get(property_type)
-        elif isinstance(property_type, type):
-            pass
-        else:
-            raise TypeError(f"The {property_name} property type must be a class or a string representing a class name, "
-                            f"not {type(property_type)}")
+        detected_type = self._detect_type(property_type)
 
         # Now we're ready to check the type
-        if not isinstance(value, (property_type, type(None))):
+        if not isinstance(value, (detected_type, type(None))):
             if raise_exception:
                 raise TypeError(
-                    f"The {property_name} property must be of type {property_type}, not {type(value)}")
+                    f"The {property_name} property must be of type {detected_type}, not {type(value)}")
             else:
                 return False
         else:
             return True
+
+    def _detect_type(self, probably_a_type):
+        detected_type = None
+        if isinstance(probably_a_type, str):
+            if '.' in probably_a_type:
+                module_name, class_name = probably_a_type.rsplit('.', 1)
+                module = sys.modules.get(module_name)
+                if module:
+                    detected_type = getattr(module, class_name)
+                else:
+                    raise TypeError(f"The {probably_a_type} class is unknown")
+            else:
+                detected_type = self.BUILTIN_TYPES.get(probably_a_type)
+        elif not isinstance(probably_a_type, type):
+            raise TypeError(f"The {property_name} property type must be a class or a string representing a class name, "
+                            f"not {type(probably_a_type)}")
+        else:
+            detected_type = probably_a_type
+
+        if detected_type is None:
+            raise TypeError(f"The {probably_a_type} doesn't seem to be a valid type")
+
+        return detected_type
 
     def _create_fget(self, property_name: str):
 
@@ -316,23 +326,30 @@ class FlexiClass:
         finally:
             self._readonly_ignored.remove(property_name)
 
-    def get_property(self, field_name: str):
-        field_value = getattr(self, field_name)
-        if isinstance(field_value, FlexiClass):
-            return field_value.get_properties()
-        else:
-            return field_value
+    # def get_property(self, field_name: str):
+    #     field_value = getattr(self, field_name)
+    #     if isinstance(field_value, FlexiClass):
+    #         return field_value.get_properties()
+    #     else:
+    #         return field_value
 
-    def get_properties(self):
+    def get_properties(self, builtins_only: bool = False):
         properties = {}
         for property_name, property_parameters in self._class_properties.items():
-            property_value = self.get_property(property_name)
+            property_value = getattr(self, property_name)
             if property_parameters['omit']:
-                continue
+                pass
             elif property_parameters['omit_if_none'] and property_value is None:
-                continue
+                pass
             elif property_parameters['omit_if_empty'] and property_value == '':
-                continue
+                pass
+            # elif isinstance(property_value, FlexiClass):
+            #     properties[property_name] = property_value.get_properties(builtins_only=builtins_only)
+            elif True \
+                    and builtins_only \
+                    and property_parameters['type'] not in self.BUILTIN_TYPES.values() \
+                    and property_parameters['type'] not in self.BUILTIN_TYPES.keys():
+                pass
             else:
                 properties[property_name] = property_value
         return properties
