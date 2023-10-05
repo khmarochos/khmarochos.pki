@@ -87,8 +87,8 @@ class PKICascade(FlexiClass, properties={
         else:
             raise CANotFound(f"There is no such CA as {nickname}")
 
-    def pki_cascade_json(self):
+    def pki_cascade_json(self, pretty: bool = False) -> str:
         result = {}
         for nickname, pki_ca in self.pki_cascade.items():
             result[nickname] = pki_ca.get_properties(builtins_only=True)
-        return json.dumps(result, sort_keys=True)
+        return json.dumps(result, sort_keys=True, indent=4 if pretty else None)

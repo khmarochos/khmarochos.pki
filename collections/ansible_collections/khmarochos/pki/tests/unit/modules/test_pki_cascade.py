@@ -1,7 +1,12 @@
+import logging
+import sys
 import unittest
 import yaml
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade import PKICascade
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
+
+logging.basicConfig(level=logging.DEBUG, handlers=[logging.StreamHandler(sys.stdout)])
 
 
 class InitCascadeTest(unittest.TestCase):
@@ -25,8 +30,16 @@ class InitCascadeTest(unittest.TestCase):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
         for pki_ca in pki_cascade.pki_cascade.values():
             pki_ca.setup()
-        pki_cascade.pki_cascade_json()
+        logging.debug(pki_cascade.pki_cascade_json(pretty=True))
 
+
+    def test_pki_issue(self):
+        pki_cascade = PKICascade(self.pki_cascade_configuration)
+        for pki_ca in pki_cascade.pki_cascade.values():
+            pki_ca.setup()
+        for pki_ca in pki_cascade.pki_cascade.values():
+            certificate = pki_ca.issue(subject_common_name='test', type=CertificateTypes.CLIENT, term=1)
+            logging.debug(certificate.get_properties())
 
 if __name__ == '__main__':
     unittest.main()

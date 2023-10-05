@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import os.path
+
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -22,7 +25,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import F
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
     CertificateSigningRequest
-from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
 
@@ -47,11 +50,11 @@ class PKICA(FlexiClass, properties={
     'strict': {'type': bool, 'default': False},
     'stubby': {'type': bool, 'default': False},
     # CA key parameters
-    'key': {'type': Key},
+    'key': {'type': PrivateKey},
     'key_llo': {'type': rsa.RSAPrivateKey},
-    'key_size': {'type': int, 'default': Constants.DEFAULT_KEY_SIZE},
-    'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_KEY_PUBLIC_EXPONENT},
-    'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_KEY_ENCRYPTED},
+    'key_size': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_SIZE},
+    'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT},
+    'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED},
     'key_passphrase': {'type': Passphrase},
     'key_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
     'key_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
@@ -84,7 +87,7 @@ class PKICA(FlexiClass, properties={
     'certificates_directory': {'default': '${root_directory}/certs'},
     'certificate_revocation_lists_directory': {'default': '${root_directory}/crl'},
     # filename parts
-    'ca_file_prefix': {'default': 'CA_${nickname}'},
+    'ca_subdirectory': {'default': 'CA'},
     'key_file_suffix': {'default': '.key'},
     'key_passphrase_file_suffix': {'default': '.key_passphrase'},
     'keystore_file_suffix': {'default': '.keystore'},
@@ -97,33 +100,34 @@ class PKICA(FlexiClass, properties={
         'default':
             '${root_directory}/openssl.cnf'
     },
-    'key_file': {
+    'ca_key_file': {
         'default':
-            '${private_directory}/${ca_file_prefix}${key_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${key_file_suffix}'
     },
-    'key_passphrase_file': {
+    'ca_key_passphrase_file': {
         'default':
-            '${private_directory}/${ca_file_prefix}${key_passphrase_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${key_passphrase_file_suffix}'
     },
     'keystore_file': {
         'default':
-            '${private_directory}/${ca_file_prefix}${keystore_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${keystore_file_suffix}'
     },
     'keystore_passphrase_file': {
         'default':
-            '${private_directory}/${ca_file_prefix}${keystore_passphrase_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${keystore_passphrase_file_suffix}'
     },
     'certificate_signing_request_file': {
         'default':
-            '${certificate_signing_requests_directory}/${ca_file_prefix}${certificate_signing_request_file_suffix}'
+            '${certificate_signing_requests_directory}/${ca_subdirectory}/'
+            '${nickname}${certificate_signing_request_file_suffix}'
     },
     'certificate_file': {
         'default':
-            '${certificates_directory}/${ca_file_prefix}${certificate_file_suffix}'
+            '${certificates_directory}/${ca_subdirectory}/${nickname}${certificate_file_suffix}'
     },
     'certificate_chain_file': {
         'default':
-            '${certificates_directory}/${ca_file_prefix}${certificate_chain_file_suffix}'
+            '${certificates_directory}/${ca_subdirectory}/${nickname}${certificate_chain_file_suffix}'
     },
 }):
 
@@ -164,9 +168,10 @@ class PKICA(FlexiClass, properties={
         if self.certificate is None:
             with self.ignore_readonly('certificate'):
                 self.certificate = Certificate(
+                    nickname=self.nickname,
                     type=CertificateTypes.CA_STUBBY if self.stubby else CertificateTypes.CA_INTERMEDIATE,
                     ca=self.pki_cascade.get_ca(self.parent_nickname) if self.parent_nickname is not None else None,
-                    ** self._bind_arguments(property_bindings),
+                    **self._bind_arguments(property_bindings),
                 )
 
         self._bind_properties([{
@@ -176,10 +181,7 @@ class PKICA(FlexiClass, properties={
 
     def setup(self):
         self.setup_directories()
-        self.certificate.certificate_signing_request.key.passphrase.setup()
-        self.certificate.certificate_signing_request.key.setup()
-        self.certificate.certificate_signing_request.setup()
-        self.certificate.setup()
+        self.issue(self.certificate)
 
     def setup_directories(self):
         for directory, mode in {
@@ -201,3 +203,66 @@ class PKICA(FlexiClass, properties={
                     raise Exception(f"Path '{directory}' exists but has wrong permissions")
             else:
                 os.makedirs(directory, mode=mode)
+
+    def issue(
+            self,
+            nickname: str,
+            certificate: Certificate,
+            file: str,
+            llo: x509.Certificate,
+            chain_file: str,
+            type: CertificateTypes,
+            term: int,
+            ca: PKICA,
+            subject_country: str,
+            subject_state_or_province: str,
+            subject_locality: str,
+            subject_organization: str,
+            subject_organizational_unit: str,
+            subject_email_address: str,
+            subject_common_name: str,
+            subject: x509.name.Name,
+            alternative_names: list[str],
+            extensions: list[str],
+            key: PrivateKey,
+            key_llo: rsa.RSAPrivateKey,
+            key_file: str,
+            key_size: int,
+            key_public_exponent: int,
+            key_encrypted: bool,
+            key_passphrase: Passphrase,
+            key_passphrase_file: str,
+            key_passphrase_value: str,
+            key_passphrase_random: bool,
+            key_passphrase_length: int,
+            key_passphrase_character_set: str,
+            certificate_signing_request: CertificateSigningRequest,
+            certificate_signing_request_llo: x509.CertificateSigningRequest,
+            certificate_signing_request_file: str
+    ) -> Certificate:
+        certificate.setup()
+        return certificate
+
+    def form_filename(
+            self,
+            object_name: str,
+            object_type: type,
+            prefix: str,
+            suffix: str
+    ):
+        if object_type == Certificate:
+            prefix = self.certificates_directory if prefix is not None else prefix
+            suffix = self.certificate_file_suffix if suffix is None else suffix
+        elif object_type == CertificateSigningRequest:
+            prefix = self.certificate_signing_requests_directory if prefix is not None else prefix
+            suffix = self.certificate_signing_request_file_suffix if suffix is None else suffix
+        elif object_type == PrivateKey:
+            prefix = self.private_directory if prefix is not None else prefix
+            suffix = self.key_file_suffix if suffix is None else suffix
+        elif object_type == Passphrase:
+            prefix = self.private_directory if prefix is not None else prefix
+            suffix = self.key_passphrase_file_suffix if suffix is None else suffix
+        else:
+            raise Exception(f"Unsupported object type '{object_type}'")
+        return f"{prefix}/{object_name}{suffix}"
+

@@ -11,13 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import inspect
+import logging
 import sys
 import re
 from contextlib import contextmanager
 from enum import Enum
-
-import q
+from types import MethodType
+from typing import Union
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
     UnknownProperty, \
@@ -30,6 +31,8 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
 
 # noinspection PyCompatibility
 class FlexiClass:
+    """@DynamicAttrs"""
+
     # Define the options of the interpolator's behaviour
     class InterpolatorBehaviour(Enum):
         NEVER = 0,
@@ -84,7 +87,7 @@ class FlexiClass:
         # q(self, kwargs)
 
         # Initialize the object's parameters
-        self._object_parameters = {}
+        self._object_properties = {}
         self._property_bindings = {}
 
         # Initialize the interpolator's breadcrumbs' stack
@@ -95,19 +98,23 @@ class FlexiClass:
         # property.
         self._readonly_ignored = []
 
+        # The properties that temporarily could be updated without being marked as updated. This list is used by the
+        # `hide_updates` context: it'll add the property name to this list when we need to update a property without
+        # marking it as updated.
+        self._hide_updates = []
+
         # Create all the class' properties. Although there is a strong temptation to do that in `__init_subclass__()`,
         # we really need to do this only when the object have been instantiated, as the object's reference (`self`)
         # needs to be injected into properties' getters and setters.
         for property_name in self._class_properties:
             if property_name != FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY:
                 # The point is that we need to create the properties only if they are not already created. At the same
-                # time, we should be ready to catch the `UnknownProperty` exception (keep in mind that `hasattr()`
-                # actually calls the property's getter!).
+                # time, we should be ready to catch the `UnknownProperty` exception (as `hasattr() actually calls the
+                # property's getter, so it will raise that exception if the property hasn't been added yet).
                 try:
                     if not hasattr(self, property_name):
-                        self._create_properties(property_name)
-                except UnknownProperty:
-                    pass
+                        self._add_property(property_name)
+                except UnknownProperty: pass
 
         # Parse the dictionary of the object's parameters given to the initializer.
         for property_name, property_value in kwargs.items():
@@ -121,8 +128,8 @@ class FlexiClass:
             # Skip the default property settings dictionary
             if property_name == FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY:
                 continue
-            if property_name not in self._object_parameters and 'default' in property_configuration:
-                with self.ignore_readonly(property_name):
+            if property_name not in self._object_properties and 'default' in property_configuration:
+                with self.ignore_readonly(property_name), self.hide_updates(property_name):
                     setattr(self, property_name, property_configuration['default'])
             try:
                 if getattr(self, property_name) is None:
@@ -130,7 +137,7 @@ class FlexiClass:
             except UnknownProperty:
                 pass
 
-    def __init_subclass__(cls, properties: dict, **kwargs):
+    def __init_subclass__(cls, properties: dict = {}, **kwargs):
 
         # Define the default property settings for the new class
         cls.DEFAULT_PROPERTY_SETTINGS = FlexiClass.DEFAULT_PROPERTY_SETTINGS.copy()
@@ -152,7 +159,7 @@ class FlexiClass:
 
         super().__init_subclass__(**kwargs)
 
-    def _create_properties(self, property_name: str):
+    def _add_property(self, property_name: str):
         fget = self._create_fget(property_name)
         fset = self._create_fset(property_name)
         # fdel = self._create_fdel(property)
@@ -160,41 +167,43 @@ class FlexiClass:
         property_assets = property(fget, fset)
         setattr(self.__class__, property_name, property_assets)
 
-    def _check_property_type(self, property_name: str, property_type, value, raise_exception: bool = True):
+    def _check_property_type(self, property_name: str, property_type, value, raise_exception: bool = True) -> bool:
 
         # As the `property_type` could be a string, we need to convert it to a class
-        detected_type = self._detect_type(property_type)
+        possible_types = self._possible_types(property_type) + (type(None),)
 
         # Now we're ready to check the type
-        if not isinstance(value, (detected_type, type(None))):
+        if not isinstance(value, possible_types):
             if raise_exception:
                 raise TypeError(
-                    f"The {property_name} property must be of type {detected_type}, not {type(value)}")
+                    f"The {property_name} property must be of type {possible_types}, not {type(value)}")
             else:
                 return False
         else:
             return True
 
-    def _detect_type(self, probably_a_type):
+    def _possible_types(self, probably_a_type) -> Union[type, tuple[type]]:
         detected_type = None
-        if isinstance(probably_a_type, str):
+        if isinstance(probably_a_type, type):
+            detected_type = probably_a_type,
+        elif isinstance(probably_a_type, str):
             if '.' in probably_a_type:
                 module_name, class_name = probably_a_type.rsplit('.', 1)
                 module = sys.modules.get(module_name)
                 if module:
-                    detected_type = getattr(module, class_name)
+                    detected_type = (getattr(module, class_name),)
                 else:
                     raise TypeError(f"The {probably_a_type} class is unknown")
             else:
                 detected_type = self.BUILTIN_TYPES.get(probably_a_type)
-        elif not isinstance(probably_a_type, type):
-            raise TypeError(f"The {property_name} property type must be a class or a string representing a class name, "
-                            f"not {type(probably_a_type)}")
+        elif hasattr(probably_a_type, '__origin__') and probably_a_type.__origin__ is Union:
+            detected_type = tuple(probably_a_type.__args__)
         else:
-            detected_type = probably_a_type
+            raise TypeError(f"Expected to get a type or a Union of type or a string representing a type's name, "
+                            f"got a {type(probably_a_type)}")
 
         if detected_type is None:
-            raise TypeError(f"The {probably_a_type} doesn't seem to be a valid type")
+            raise TypeError(f"The {probably_a_type} doesn't seem to be a valid type at all")
 
         return detected_type
 
@@ -213,10 +222,14 @@ class FlexiClass:
                 value = getattr(backend_object, backend_property)
             elif callable(property_settings['fget']):
                 value = property_settings['fget']()
+            elif isinstance(property_settings['fget'], str):
+                value = getattr(myself, property_settings['fget'])()
             elif property_name not in myself._class_properties:
                 raise UnknownProperty(f"The {property_name} property is unknown")
+            elif (object_propetries := myself._object_properties.get(property_name)) is not None:
+                value = object_propetries.get('value')
             else:
-                value = myself._object_parameters.get(property_name)
+                value = None
 
             # Interpolating variables
             if property_settings['interpolate'] == FlexiClass.InterpolatorBehaviour.ON_GET:
@@ -237,7 +250,7 @@ class FlexiClass:
 
         property_settings = self.__class__._class_properties[property_name]
 
-        def _fset(myself, value):
+        def _fset(myself, value, record_update: bool = True):
 
             # Value checking
             if value is None:
@@ -263,8 +276,15 @@ class FlexiClass:
                     setattr(backend_object, backend_property, value)
             elif callable(property_settings['fset']):
                 property_settings['fset'](value)
+            elif isinstance(property_settings['fset'], str):
+                getattr(myself, property_settings['fset'])(value)
             else:
-                myself._object_parameters[property_name] = value
+                if property_name not in myself._object_properties:
+                    myself._object_properties[property_name] = {}
+                myself._object_properties[property_name]['value'] = value
+
+            if property_name not in myself._hide_updates:
+                myself._object_properties[property_name]['updated'] = True
 
         return _fset
 
@@ -311,6 +331,15 @@ class FlexiClass:
             for property_backend, property_frontend in property_bindings.items()
         }
 
+    def _from_kwargs_or_properties(self, property_name: str):
+        result = None
+        if (caller := inspect.currentframe().f_back) is not None:
+            (args, _, _, values) = inspect.getargvalues(caller)
+            result = values.get(property_name)
+        if result is None:
+            result = getattr(self, property_name)
+        return result
+
     #
     # PUBLIC METHODS
     #
@@ -326,12 +355,25 @@ class FlexiClass:
         finally:
             self._readonly_ignored.remove(property_name)
 
+    @contextmanager
+    def hide_updates(self, property_name: str):
+        if property_name not in self._class_properties:
+            raise UnknownProperty(f"The {property_name} property is unknown")
+        self._hide_updates.append(property_name)
+        try:
+            yield
+        finally:
+            self._hide_updates.remove(property_name)
+
     # def get_property(self, field_name: str):
     #     field_value = getattr(self, field_name)
     #     if isinstance(field_value, FlexiClass):
     #         return field_value.get_properties()
     #     else:
     #         return field_value
+
+    def property_updated(self, property_name: str) -> bool:
+        return self._object_properties.get(property_name, {}).get('updated', False)
 
     def get_properties(self, builtins_only: bool = False):
         properties = {}

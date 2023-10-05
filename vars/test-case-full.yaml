@@ -2,11 +2,11 @@ pki_ca_cascade:
   __propagated:
     global_root_directory: "/tmp/pki"
     domain: "k0.z0.r0.infra.d.kloudster.net"
-    certificate_subject_country: PL
-    certificate_subject_state_or_province: Malopolskie
-    certificate_subject_locality: Krakow
-    certificate_subject_organization: TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA
-    certificate_subject_organizational_unit: Security Service
+    certificate_subject_country_name: PL
+    certificate_subject_state_or_province_name: Malopolskie
+    certificate_subject_locality_name: Krakow
+    certificate_subject_organization_name: TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA
+    certificate_subject_organizational_unit_name: Security Service
     certificate_subject_email_address: security@kloudster.net
     key_passphrase_random: true
   root:

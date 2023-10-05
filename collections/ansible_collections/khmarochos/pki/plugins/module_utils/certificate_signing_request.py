@@ -12,19 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import q
-
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives import hashes, serialization
 
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateExtensionPurposes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
-from ansible_collections.khmarochos.pki.plugins.module_utils.key import Key
-from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 
 
 class CertificateSigningRequest(FlexiClass, properties={
@@ -35,138 +28,54 @@ class CertificateSigningRequest(FlexiClass, properties={
         'interpolate': FlexiClass.InterpolatorBehaviour.NEVER,
         'type': str
     },
+    'nickname': {'mandatory': True},
     'llo': {'type': x509.CertificateSigningRequest},
     'file': {'mandatory': True},
-    'type': {'type': CertificateTypes, 'mandatory': True},
-    'subject_country': {'mandatory': True},
-    'subject_state_or_province': {'mandatory': True},
-    'subject_locality': {'mandatory': True},
-    'subject_organization': {'mandatory': True},
-    'subject_organizational_unit': {'mandatory': True},
-    'subject_email_address': {'mandatory': True},
-    'subject_common_name': {'mandatory': True},
+    'certificate_type': {'type': CertificateTypes},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list},
-    'extensions': {'type': list},
-    'key': {'type': Key},
-    'key_llo': {'type': rsa.RSAPrivateKey},
-    'key_file': {'mandatory_unless': 'key'},
-    'key_size': {'type': int, 'default': Constants.DEFAULT_KEY_SIZE},
-    'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_KEY_PUBLIC_EXPONENT},
-    'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_KEY_ENCRYPTED},
-    'key_passphrase': {'type': Passphrase},
-    'key_passphrase_value': {},
-    'key_passphrase_file': {},
-    'key_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
-    'key_passphrase_length': {'type': int, 'default': Constants.DEFAULT_PASSPHRASE_LENGTH},
-    'key_passphrase_character_set': {'type': str, 'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET},
+    'alternative_names': {'type': list, 'default': []},
+    'extra_extensions': {'type': list, 'default': []},
+    'private_key': {'type': PrivateKey},
 }):
 
-    def __init__(self, **kwargs):
-
-        super().__init__(**kwargs)
-
-        property_bindings = {
-            'llo': 'key_llo',
-            'file': 'key_file',
-            'size': 'key_size',
-            'public_exponent': 'key_public_exponent',
-            'encrypted': 'key_encrypted',
-            'passphrase': 'key_passphrase',
-            'passphrase_value': 'key_passphrase_value',
-            'passphrase_file': 'key_passphrase_file',
-            'passphrase_random': 'key_passphrase_random',
-            'passphrase_length': 'key_passphrase_length',
-            'passphrase_character_set': 'key_passphrase_character_set',
-        }
-
-        if self.key is None:
-            with self.ignore_readonly('key'):
-                self.key = Key(** self._bind_arguments(property_bindings))
-
-        self._bind_properties([{
-            'object': self.key,
-            'properties': property_bindings
-        }])
-
-        if self.subject is None:
-            subject_name = []
-            if self.subject_country is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, self.subject_country))
-            if self.subject_state_or_province is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.STATE_OR_PROVINCE_NAME, self.subject_state_or_province))
-            if self.subject_locality is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.LOCALITY_NAME, self.subject_locality))
-            if self.subject_organization is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, self.subject_organization))
-            if self.subject_organizational_unit is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME, self.subject_organizational_unit))
-            if self.subject_email_address is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, self.subject_email_address))
-            if self.subject_common_name is not None:
-                subject_name.append(
-                    x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.subject_common_name))
-            with self.ignore_readonly('subject'):
-                self.subject = x509.Name(subject_name)
-
-        if self.extensions is None:
-            with self.ignore_readonly('extensions'):
-                self.extensions = []
-            if self.type == CertificateTypes.CA_STUBBY:
-                self.extensions.append(
-                    {
-                        'purpose': CertificateExtensionPurposes.CA,
-                        'critical': True,
-                        'extension': x509.BasicConstraints(ca=True, path_length=0)
-                    }
-                )
-            elif self.type == CertificateTypes.CA_INTERMEDIATE:
-                self.extensions.append(
-                    {
-                        'purpose': CertificateExtensionPurposes.CA,
-                        'critical': True,
-                        'extension': x509.BasicConstraints(ca=True, path_length=None)
-                    }
-                )
-    def setup(self):
-        self.setup_llo()
-
-    def setup_llo(self, force_save: bool = False, force_load: bool = False):
-        generated = False
-        if getattr(self, 'llo') is None or force_load:
-            try:
-                self.load_llo()
-            except FileNotFoundError:
-                self.make_llo()
-                generated = True
-        if generated or force_save:
-            self.save_llo()
-
-    def load_llo(self):
+    def load(self, anatomize_llo: bool = True):
         with open(self.file, 'rb') as f, self.ignore_readonly('llo'):
             self.llo = x509.load_pem_x509_csr(f.read())
+        if anatomize_llo:
+            self.anatomize_llo()
 
-    def make_llo(self):
-        certificate_signing_request_builder = x509.CertificateSigningRequestBuilder()
-        certificate_signing_request_builder = certificate_signing_request_builder.subject_name(self.subject)
-        for extension in self.extensions:
-            certificate_signing_request_builder = certificate_signing_request_builder.add_extension(
-                extension['extension'],
-                extension['critical']
-            )
-        with self.ignore_readonly('llo'):
-            self.llo = certificate_signing_request_builder.sign(
-                private_key=self.key.llo,
-                algorithm=hashes.SHA256()
-            )
+    def anatomize_llo(self):
+        with self.ignore_readonly('subject'):
+            self.subject = self.llo.subject
+        with self.ignore_readonly('certificate_type'):
+            self.certificate_type = CertificateTypes.CLIENT
+        with self.ignore_readonly('alternative_names'):
+            self.alternative_names = []
+        with self.ignore_readonly('extra_extensions'):
+            self.extra_extensions = []
+        for extension in self.llo.extensions:
+            if extension.oid == x509.oid.ExtensionOID.BASIC_CONSTRAINTS:
+                with self.ignore_readonly('certificate_type'):
+                    if extension.value.ca:
+                        if extension.value.path_length == 0:
+                            self.certificate_type = CertificateTypes.CA_STUBBY
+                        else:
+                            self.certificate_type = CertificateTypes.CA_INTERMEDIATE
+            elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                with self.ignore_readonly('alternative_names'):
+                    for alternative_name in extension.value:
+                        if isinstance(alternative_name, x509.DNSName):
+                            self.alternative_names.append(alternative_name.value)
+            else:
+                with self.ignore_readonly('extra_extensions'):
+                    self.extra_extensions.append(
+                        {
+                            'critical': extension.critical,
+                            'extension': extension.value
+                        }
+                    )
 
-    def save_llo(self):
+    def save(self):
         with open(self.file, 'wb') as f:
             f.write(self.get_pem())
 
