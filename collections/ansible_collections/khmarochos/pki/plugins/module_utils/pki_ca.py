@@ -243,26 +243,26 @@ class PKICA(FlexiClass, properties={
         certificate.setup()
         return certificate
 
-    def form_filename(
-            self,
-            object_name: str,
-            object_type: type,
-            prefix: str,
-            suffix: str
-    ):
-        if object_type == Certificate:
-            prefix = self.certificates_directory if prefix is not None else prefix
-            suffix = self.certificate_file_suffix if suffix is None else suffix
-        elif object_type == CertificateSigningRequest:
-            prefix = self.certificate_signing_requests_directory if prefix is not None else prefix
-            suffix = self.certificate_signing_request_file_suffix if suffix is None else suffix
-        elif object_type == PrivateKey:
-            prefix = self.private_directory if prefix is not None else prefix
-            suffix = self.key_file_suffix if suffix is None else suffix
-        elif object_type == Passphrase:
-            prefix = self.private_directory if prefix is not None else prefix
-            suffix = self.key_passphrase_file_suffix if suffix is None else suffix
-        else:
-            raise Exception(f"Unsupported object type '{object_type}'")
-        return f"{prefix}/{object_name}{suffix}"
+    # def form_filename(
+    #         self,
+    #         object_name: str,
+    #         object_type: type,
+    #         prefix: str,
+    #         suffix: str
+    # ):
+    #     if object_type == Certificate:
+    #         prefix = self.certificates_directory if prefix is not None else prefix
+    #         suffix = self.certificate_file_suffix if suffix is None else suffix
+    #     elif object_type == CertificateSigningRequest:
+    #         prefix = self.certificate_signing_requests_directory if prefix is not None else prefix
+    #         suffix = self.certificate_signing_request_file_suffix if suffix is None else suffix
+    #     elif object_type == PrivateKey:
+    #         prefix = self.private_directory if prefix is not None else prefix
+    #         suffix = self.key_file_suffix if suffix is None else suffix
+    #     elif object_type == Passphrase:
+    #         prefix = self.private_directory if prefix is not None else prefix
+    #         suffix = self.key_passphrase_file_suffix if suffix is None else suffix
+    #     else:
+    #         raise Exception(f"Unsupported object type '{object_type}'")
+    #     return f"{prefix}/{object_name}{suffix}"
 

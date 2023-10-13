@@ -39,7 +39,7 @@ class Certificate(FlexiClass, properties={
     'file': {'mandatory': True},
     'chain_file': {},
     'certificate_type': {'type': CertificateTypes},
-    'term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
+    'term': {'type': int},
     'ca': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca.PKICA'},
     'issuer_private_key': {'type': PrivateKey},
     'issuer_subject': {'type': x509.name.Name},
@@ -56,6 +56,8 @@ class Certificate(FlexiClass, properties={
             self.anatomize_llo()
 
     def anatomize_llo(self):
+        with self.ignore_readonly('term'):
+            self.term = (self.llo.not_valid_after - self.llo.not_valid_before).days
         with self.ignore_readonly('subject'):
             self.subject = self.llo.subject
         with self.ignore_readonly('certificate_type'):

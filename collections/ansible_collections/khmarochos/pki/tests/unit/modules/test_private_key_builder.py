@@ -77,7 +77,7 @@ class TestPrivateKeyBuilder(unittest.TestCase, AbstractBuilderTest):
             passphrase: BuilderCheckList[Callable],
     ):
         self._test_object(
-            object_to_test=_builder,
+            _object_to_test=_builder,
             nickname=nickname,
             llo=llo,
             file=file,

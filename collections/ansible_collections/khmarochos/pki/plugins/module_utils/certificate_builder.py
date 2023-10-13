@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import logging
 import warnings
 from typing import Union
 
@@ -40,7 +41,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
     'llo': {'type': x509.Certificate},
     'file': {},
     'chain_file': {},
-    'certificate_type': {'type': CertificateTypes, 'default': CertificateTypes.CLIENT},
+    'certificate_type': {'type': CertificateTypes, 'default': Constants.DEFAULT_CERTIFICATE_TYPE},
     'term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
     'ca': {'type': PKICA},
     'issuer_private_key': {'type': PrivateKey},
@@ -72,9 +73,22 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
     def init_with_llo(
             self,
             nickname: str = None,
+            file: str = None,
             llo: x509.Certificate = None,
+            private_key: PrivateKey = None,
     ):
-        pass
+        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
+            raise ValueError('The nickname parameter cannot be None')
+        if (file := self._from_kwargs_or_properties('file')) is None:
+            raise ValueError('The file parameter cannot be None')
+        if (llo := self._from_kwargs_or_properties('llo')) is None:
+            raise ValueError('The llo parameter cannot be None')
+        if (private_key := self._from_kwargs_or_properties('private_key')) is None:
+            raise ValueError('The private_key parameter cannot be None')
+        certificate = Certificate(nickname=nickname, file=file, llo=llo, private_key=private_key)
+        certificate.anatomize_llo()
+        certificate.save()
+        return certificate
 
     def sign_instantly(
             self,

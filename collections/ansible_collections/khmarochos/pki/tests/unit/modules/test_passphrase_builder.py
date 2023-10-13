@@ -150,7 +150,7 @@ class TestPassphraseBuilder(unittest.TestCase, AbstractBuilderTest):
 
     # Test parameters added at runtime
 
-    def test_parameters_passed_at_runtime(self):
+    def test_parameters_added_at_runtime(self):
         builder = PassphraseBuilder() \
             .add_file(self.temporary_file_name) \
             .add_random(True) \
@@ -176,7 +176,7 @@ class TestPassphraseBuilder(unittest.TestCase, AbstractBuilderTest):
             length=self.length,
         )
 
-    def test_parameters_passed_at_runtime_with_default_values(self):
+    def test_parameters_added_at_runtime_with_default_values(self):
         builder = PassphraseBuilder() \
             .add_file(self.temporary_file_name) \
             .add_random(True)
@@ -202,7 +202,7 @@ class TestPassphraseBuilder(unittest.TestCase, AbstractBuilderTest):
 
     # Test parameters passed to the final call
 
-    def test_parameters_passed_to_final_call(self):
+    def test_parameters_passed_with_final_call(self):
         passphrase = PassphraseBuilder() \
             .init_with_random(
                 file=self.temporary_file_name,
@@ -221,7 +221,7 @@ class TestPassphraseBuilder(unittest.TestCase, AbstractBuilderTest):
             length=self.length,
         )
 
-    def test_parameters_passed_to_final_call_with_default_values(self):
+    def test_parameters_passed_with_final_call_with_default_values(self):
         passphrase = PassphraseBuilder() \
             .init_with_random(
                 file=self.temporary_file_name,
