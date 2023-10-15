@@ -86,6 +86,13 @@ class BuilderTestType(Enum):
     NOT_IN = 'not_in'
     LAMBDA = 'lambda'
 
+class StopAfter(Enum):
+    DO_NOT_RUN = 0,
+    PASSPHRASE = 1,
+    PRIVATE_KEY = 2,
+    CERTIFICATE_SIGNING_REQUEST = 3,
+    CERTIFICATE = 4
+
 __T = TypeVar("__T")
 BuilderCheckListElement = Union[Tuple[BuilderTestType], Tuple[BuilderTestType, Any], __T]
 BuilderCheckList = Union[BuilderCheckListElement[__T], List[BuilderCheckListElement[__T]]]
@@ -189,6 +196,7 @@ class TestingSet(FlexiClass, properties={
         'readonly': True,
         'interpolate': FlexiClass.InterpolatorBehaviour.NEVER
     },
+    'stop_after': {'type': StopAfter, 'default': StopAfter.DO_NOT_RUN},
     'nickname': {'type': Union[str, Randomizer]},
     'nickname_charset': {'default': 'abcdefghijklmnopqrstuvwxyz'},
     'nickname_minimal_length': {'type': int, 'default': 8},
@@ -240,152 +248,159 @@ class TestingSet(FlexiClass, properties={
                 self.nickname = self.nickname.randomize_nickname()
 
         # The passphrase-related parameters
-        if self.passphrase_file_name is not None:
-            raise ValueError('The passphrase_file_name parameter cannot be set manually')
-        if self.passphrase_file is None:
-            with self.ignore_readonly('passphrase_file'):
-                self.passphrase_file = tempfile.NamedTemporaryFile(
-                    prefix='f{nickname}.',
-                    suffix='.passphrase.txt',
-                )
-            with self.ignore_readonly('passphrase_file_name'):
-                self.passphrase_file_name = self.passphrase_file.name
-        if self.passphrase_random:
-            if isinstance(self.passphrase_length, Randomizer):
-                with self.ignore_readonly('passphrase_length'):
-                    self.passphrase_length = self.passphrase_length.randomize_passphrase_length(
-                        min_length=self.passphrase_minimal_length,
-                        max_length=self.passphrase_maximal_length
+        if self.stop_after.value >= StopAfter.PASSPHRASE.value:
+            if self.passphrase_file_name is not None:
+                raise ValueError('The passphrase_file_name parameter cannot be set manually')
+            if self.passphrase_file is None:
+                with self.ignore_readonly('passphrase_file'):
+                    self.passphrase_file = tempfile.NamedTemporaryFile(
+                        prefix='f{nickname}.',
+                        suffix='.passphrase.txt',
                     )
-            if isinstance(self.passphrase_character_set, Randomizer):
-                with self.ignore_readonly('passphrase_character_set'):
-                    self.passphrase_character_set = self.passphrase_character_set.randomize_passphrase_character_set()
+                with self.ignore_readonly('passphrase_file_name'):
+                    self.passphrase_file_name = self.passphrase_file.name
+            if self.passphrase_random:
+                if isinstance(self.passphrase_length, Randomizer):
+                    with self.ignore_readonly('passphrase_length'):
+                        self.passphrase_length = self.passphrase_length.randomize_passphrase_length(
+                            min_length=self.passphrase_minimal_length,
+                            max_length=self.passphrase_maximal_length
+                        )
+                if isinstance(self.passphrase_character_set, Randomizer):
+                    with self.ignore_readonly('passphrase_character_set'):
+                        self.passphrase_character_set = self.passphrase_character_set.randomize_passphrase_character_set()
 
         # The private key-related parameters
-        if self.private_key_file_name is not None:
-            raise ValueError('The private_key_file_name parameter cannot be set manually')
-        if self.private_key_file is None:
-            with self.ignore_readonly('private_key_file'):
-                self.private_key_file = tempfile.NamedTemporaryFile(
-                    prefix=f'{self.nickname}.',
-                    suffix='.private_key.pem',
-                )
-            with self.ignore_readonly('private_key_file_name'):
-                self.private_key_file_name = self.private_key_file.name
+        if self.stop_after.value >= StopAfter.PRIVATE_KEY.value:
+            if self.private_key_file_name is not None:
+                raise ValueError('The private_key_file_name parameter cannot be set manually')
+            if self.private_key_file is None:
+                with self.ignore_readonly('private_key_file'):
+                    self.private_key_file = tempfile.NamedTemporaryFile(
+                        prefix=f'{self.nickname}.',
+                        suffix='.private_key.pem',
+                    )
+                with self.ignore_readonly('private_key_file_name'):
+                    self.private_key_file_name = self.private_key_file.name
 
-        # The certificate signing request-related parameters
-        # ...certificate_signing_request_file_name
-        if self.certificate_signing_request_file_name is not None:
-            raise ValueError('The certificate_signing_request_file_name parameter cannot be set manually')
-        # ...certificate_signing_request_file
-        if self.certificate_signing_request_file is None:
-            with self.ignore_readonly('certificate_signing_request_file'):
-                self.certificate_signing_request_file = tempfile.NamedTemporaryFile(
-                    prefix=f'{self.nickname}.',
-                    suffix='.csr.pem',
-                )
-            with self.ignore_readonly('certificate_signing_request_file_name'):
-                self.certificate_signing_request_file_name = self.certificate_signing_request_file.name
-        # ...certificate_subject
-        if isinstance(self.certificate_subject_common_name, Randomizer):
-            with self.ignore_readonly('certificate_subject_common_name'):
-                self.certificate_subject_common_name = self.certificate_subject_common_name.randomize_certificate_subject_common_name()
-        if self.certificate_subject_common_name is not None:
-            with self.ignore_readonly('certificate_subject'):
-                self.certificate_subject = x509.name.Name([
-                    x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, DEFAULT_CERTIFICATE_SUBJECT_COUNTRY_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.STATE_OR_PROVINCE_NAME, DEFAULT_CERTIFICATE_SUBJECT_STATE_OR_PROVINCE_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.LOCALITY_NAME, DEFAULT_CERTIFICATE_SUBJECT_LOCALITY_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS),
-                    x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.certificate_subject_common_name)
-                ])
-        if self.certificate_subject is None:
-            with self.ignore_readonly('certificate_subject'):
-                self.certificate_subject = x509.name.Name([
-                    x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, DEFAULT_CERTIFICATE_SUBJECT_COUNTRY_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.STATE_OR_PROVINCE_NAME, DEFAULT_CERTIFICATE_SUBJECT_STATE_OR_PROVINCE_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.LOCALITY_NAME, DEFAULT_CERTIFICATE_SUBJECT_LOCALITY_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME),
-                    x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS),
-                    x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.nickname + '.' + DOMAIN_NAME),
-                ])
-        # ...certificate_alternative_names
-        if isinstance(self.certificate_alternative_names, Randomizer):
-            certificate_alternative_names = []
-            for _ in range(0, self.certificate_alternative_names_number - 1):
-                certificate_alternative_names.append(self.certificate_alternative_names.randomize_certificate_subject_common_name())
-            with self.ignore_readonly('certificate_alternative_names'):
-                self.certificate_alternative_names = certificate_alternative_names
+        if self.stop_after.value >= StopAfter.CERTIFICATE_SIGNING_REQUEST.value:
+            # The certificate signing request-related parameters
+            # ...certificate_signing_request_file_name
+            if self.certificate_signing_request_file_name is not None:
+                raise ValueError('The certificate_signing_request_file_name parameter cannot be set manually')
+            # ...certificate_signing_request_file
+            if self.certificate_signing_request_file is None:
+                with self.ignore_readonly('certificate_signing_request_file'):
+                    self.certificate_signing_request_file = tempfile.NamedTemporaryFile(
+                        prefix=f'{self.nickname}.',
+                        suffix='.csr.pem',
+                    )
+                with self.ignore_readonly('certificate_signing_request_file_name'):
+                    self.certificate_signing_request_file_name = self.certificate_signing_request_file.name
+            # ...certificate_subject
+            if isinstance(self.certificate_subject_common_name, Randomizer):
+                with self.ignore_readonly('certificate_subject_common_name'):
+                    self.certificate_subject_common_name = self.certificate_subject_common_name.randomize_certificate_subject_common_name()
+            if self.certificate_subject_common_name is not None:
+                with self.ignore_readonly('certificate_subject'):
+                    self.certificate_subject = x509.name.Name([
+                        x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, DEFAULT_CERTIFICATE_SUBJECT_COUNTRY_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.STATE_OR_PROVINCE_NAME, DEFAULT_CERTIFICATE_SUBJECT_STATE_OR_PROVINCE_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.LOCALITY_NAME, DEFAULT_CERTIFICATE_SUBJECT_LOCALITY_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS),
+                        x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.certificate_subject_common_name)
+                    ])
+            if self.certificate_subject is None:
+                with self.ignore_readonly('certificate_subject'):
+                    self.certificate_subject = x509.name.Name([
+                        x509.NameAttribute(x509.oid.NameOID.COUNTRY_NAME, DEFAULT_CERTIFICATE_SUBJECT_COUNTRY_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.STATE_OR_PROVINCE_NAME, DEFAULT_CERTIFICATE_SUBJECT_STATE_OR_PROVINCE_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.LOCALITY_NAME, DEFAULT_CERTIFICATE_SUBJECT_LOCALITY_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.ORGANIZATION_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME, DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME),
+                        x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS),
+                        x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.nickname + '.' + DOMAIN_NAME),
+                    ])
+            # ...certificate_alternative_names
+            if isinstance(self.certificate_alternative_names, Randomizer):
+                certificate_alternative_names = []
+                for _ in range(0, self.certificate_alternative_names_number - 1):
+                    certificate_alternative_names.append(self.certificate_alternative_names.randomize_certificate_subject_common_name())
+                with self.ignore_readonly('certificate_alternative_names'):
+                    self.certificate_alternative_names = certificate_alternative_names
 
-        # The certificate-related parameters
-        # ...certificate_file_name
-        if self.certificate_file_name is not None:
-            raise ValueError('The certificate_file_name parameter cannot be set manually')
-        # ...certificate_file
-        if self.certificate_file is None:
-            with self.ignore_readonly('certificate_file'):
-                self.certificate_file = tempfile.NamedTemporaryFile(
-                    prefix=f'{self.nickname}.',
-                    suffix='.crt.pem',
-                )
-        with self.ignore_readonly('certificate_file_name'):
-            self.certificate_file_name = self.certificate_file.name
-        # ...certificate_chain_file_name
-        if self.certificate_chain_file_name is not None:
-            raise ValueError('The certificate_chain_file_name parameter cannot be set manually')
-        # ...certificate_chain_file
-        if self.certificate_chain_file is None:
-            with self.ignore_readonly('certificate_chain_file'):
-                self.certificate_chain_file = tempfile.NamedTemporaryFile(
-                    prefix=f'{self.nickname}.',
-                    suffix='.chain.crt.pem',
-                )
-        with self.ignore_readonly('certificate_chain_file_name'):
-            self.certificate_chain_file_name = self.certificate_chain_file.name
-        # ...certificate_term
-        if isinstance(self.certificate_term, Randomizer):
-            with self.ignore_readonly('certificate_term'):
-                self.certificate_term = self.certificate_term.randomize_certificate_term()
+        if self.stop_after.value >= StopAfter.CERTIFICATE.value:
+            # The certificate-related parameters
+            # ...certificate_file_name
+            if self.certificate_file_name is not None:
+                raise ValueError('The certificate_file_name parameter cannot be set manually')
+            # ...certificate_file
+            if self.certificate_file is None:
+                with self.ignore_readonly('certificate_file'):
+                    self.certificate_file = tempfile.NamedTemporaryFile(
+                        prefix=f'{self.nickname}.',
+                        suffix='.crt.pem',
+                    )
+            with self.ignore_readonly('certificate_file_name'):
+                self.certificate_file_name = self.certificate_file.name
+            # ...certificate_chain_file_name
+            if self.certificate_chain_file_name is not None:
+                raise ValueError('The certificate_chain_file_name parameter cannot be set manually')
+            # ...certificate_chain_file
+            if self.certificate_chain_file is None:
+                with self.ignore_readonly('certificate_chain_file'):
+                    self.certificate_chain_file = tempfile.NamedTemporaryFile(
+                        prefix=f'{self.nickname}.',
+                        suffix='.chain.crt.pem',
+                    )
+            with self.ignore_readonly('certificate_chain_file_name'):
+                self.certificate_chain_file_name = self.certificate_chain_file.name
+            # ...certificate_term
+            if isinstance(self.certificate_term, Randomizer):
+                with self.ignore_readonly('certificate_term'):
+                    self.certificate_term = self.certificate_term.randomize_certificate_term()
 
         #
         # Initializing the objects
         #
 
-        # Generating the passphrase
-        passphrase_builder = PassphraseBuilder() \
-            .add_file(self.passphrase_file_name) \
-            .add_random(self.passphrase_random) \
-            .add_length(self.passphrase_length) \
-            .add_character_set(self.passphrase_character_set) \
-            .add_value(self.passphrase_value)
-        with self.ignore_readonly('passphrase'):
-            if self.passphrase_random:
-                self.passphrase = passphrase_builder.init_with_random()
-            else:
-                self.passphrase = passphrase_builder.init_with_value()
+        if self.stop_after.value >= StopAfter.PASSPHRASE.value:
+            # Generating the passphrase
+            passphrase_builder = PassphraseBuilder() \
+                .add_file(self.passphrase_file_name) \
+                .add_random(self.passphrase_random) \
+                .add_length(self.passphrase_length) \
+                .add_character_set(self.passphrase_character_set) \
+                .add_value(self.passphrase_value)
+            with self.ignore_readonly('passphrase'):
+                if self.passphrase_random:
+                    self.passphrase = passphrase_builder.init_with_random()
+                else:
+                    self.passphrase = passphrase_builder.init_with_value()
 
-        # Generating the private key
-        private_key_builder = PrivateKeyBuilder() \
-            .add_nickname(self.nickname) \
-            .add_file(self.private_key_file_name) \
-            .add_passphrase(self.passphrase)
-        with self.ignore_readonly('private_key'):
-            self.private_key = private_key_builder.init_new()
+        if self.stop_after.value >= StopAfter.PRIVATE_KEY.value:
+            # Generating the private key
+            private_key_builder = PrivateKeyBuilder() \
+                .add_nickname(self.nickname) \
+                .add_file(self.private_key_file_name) \
+                .add_passphrase(self.passphrase)
+            with self.ignore_readonly('private_key'):
+                self.private_key = private_key_builder.init_new()
 
-        # Generating the certificate signing request
-        certificate_signing_request_builder = CertificateSigningRequestBuilder() \
-            .add_nickname(self.nickname) \
-            .add_file(self.certificate_signing_request_file_name) \
-            .add_certificate_type(self.certificate_type) \
-            .add_private_key(self.private_key) \
-            .add_subject(self.certificate_subject) \
-            .add_alternative_names(self.certificate_alternative_names) \
-            .add_extra_extensions(self.certificate_extra_extensions)
-        with self.ignore_readonly('certificate_signing_request'):
-            self.certificate_signing_request = certificate_signing_request_builder.init_new()
+        if self.stop_after.value >= StopAfter.CERTIFICATE_SIGNING_REQUEST.value:
+            # Generating the certificate signing request
+            certificate_signing_request_builder = CertificateSigningRequestBuilder() \
+                .add_nickname(self.nickname) \
+                .add_file(self.certificate_signing_request_file_name) \
+                .add_certificate_type(self.certificate_type) \
+                .add_private_key(self.private_key) \
+                .add_subject(self.certificate_subject) \
+                .add_alternative_names(self.certificate_alternative_names) \
+                .add_extra_extensions(self.certificate_extra_extensions)
+            with self.ignore_readonly('certificate_signing_request'):
+                self.certificate_signing_request = certificate_signing_request_builder.init_new()
 
     def __del__(self):
         if self.passphrase_file is not None:
@@ -569,47 +584,3 @@ class AbstractBuilderTest(ABC):
                 )) is False:
                     return result
         return True
-
-    # @abstractmethod
-    # def setUpClass(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def setUp(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def tearDown(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def _test_builder(self, **kwargs):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_passed_to_constructor(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_passed_to_constructor_with_default_values(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_added_at_runtime(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_added_at_runtime_with_default_values(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_passed_with_final_call(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_parameters_passed_with_final_call_with_default_values(self):
-    #     pass
-    #
-    # @abstractmethod
-    # def test_reset(self, **kwargs):
-    #     pass

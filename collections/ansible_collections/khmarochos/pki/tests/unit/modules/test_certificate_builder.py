@@ -43,20 +43,20 @@ from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test
 # noinspection SpellCheckingInspection
 class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
 
-    class TPConfiguring(Enum):
+    class TPParametersPassing(Enum):
         CONSTRUCTOR = 'passing parameters to the constructor'
         RUNTIME = 'adding parameters at runtime'
         FINAL_CALL = 'passing parameters with the final call'
 
-    class TPValues(Enum):
+    class TPValuesAssignment(Enum):
         DEFAULT = 'using default values'
         DEFINED = 'using defined values'
 
-    class TPRequest(Enum):
+    class TPSigningRequest(Enum):
         CSR = 'using a certificate signing request'
         INSTANT = 'instantly signing the certificate'
 
-    class TPIssuer(Enum):
+    class TPSigningKey(Enum):
         SELF = 'signing the certificate by itself'
         CA_ROOT = 'signing the certificate by a CA'
         CA_INTERMEDIATE_1 = 'signing the certificate by an intermediate CA signed by a root CA'
@@ -68,21 +68,21 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         LOAD_FILE = 'load a certificate from a file'
 
     PARAMETER_SETS = []
-    for tp_configuring in list(TPConfiguring):
-        for tp_values in list(TPValues):
-            for tp_request in list(TPRequest):
-                for tp_issuer in list(TPIssuer):
+    for tp_parameters_passing in list(TPParametersPassing):
+        for tp_values_assignment in list(TPValuesAssignment):
+            for tp_signing_request in list(TPSigningRequest):
+                for tp_signing_key in list(TPSigningKey):
                     PARAMETER_SETS.append((
                         '__'.join((
-                            tp_configuring.name,
-                            tp_values.name,
-                            tp_request.name,
-                            tp_issuer.name
+                            tp_parameters_passing.name,
+                            tp_values_assignment.name,
+                            tp_signing_request.name,
+                            tp_signing_key.name
                         )),
-                        tp_configuring,
-                        tp_values,
-                        tp_request,
-                        tp_issuer
+                        tp_parameters_passing,
+                        tp_values_assignment,
+                        tp_signing_request,
+                        tp_signing_key
                     ))
 
     DOMAIN_NAME = 'kloudster.com'
@@ -173,9 +173,9 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         randomizer = Randomizer()
 
         if tp_issuer in (
-                TestCertificateBuilder.TPIssuer.CA_ROOT,
-                TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_1,
-                TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_2
+                TestCertificateBuilder.TPSigningKey.CA_ROOT,
+                TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1,
+                TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2
         ):
             testset_ca_root = TestingSet(
                 nickname=randomizer,
@@ -219,8 +219,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             )
 
         if tp_issuer in (
-                TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_1,
-                TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_2
+                TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1,
+                TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2
         ):
             testset_ca_intermediate_1 = TestingSet(
                 nickname=randomizer,
@@ -266,7 +266,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             )
 
         if tp_issuer in (
-                TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_2,
+                TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2,
         ):
             testset_ca_intermediate_2 = TestingSet(
                 nickname=randomizer,
@@ -321,111 +321,115 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 'outcome': {},
             }
         }
-        testset_parameters['provided']['testset']['nickname'] = randomizer
-        testset_parameters['provided']['testset']['passphrase_random'] = True
-        testset_parameters['provided']['testset']['passphrase_length'] = randomizer
-        testset_parameters['provided']['testset']['passphrase_character_set'] = randomizer
-        testset_parameters['provided']['testset']['certificate_type'] = CertificateTypes.CLIENT
-        if tp_values == TestCertificateBuilder.TPValues.DEFINED:
-            testset_parameters['provided']['testset']['certificate_term'] = randomizer
-            testset_parameters['provided']['testset']['certificate_subject_common_name'] = randomizer
-            testset_parameters['provided']['testset']['certificate_alternative_names'] = randomizer
-            testset_parameters['provided']['testset']['certificate_extra_extensions'] = []
-        elif tp_values == TestCertificateBuilder.TPValues.DEFAULT:
+        provided_to_testset = testset_parameters['provided']['testset']
+        provided_to_builder = testset_parameters['provided']['builder']
+        expected_in_builder = testset_parameters['expected']['builder']
+        expected_in_outcome = testset_parameters['expected']['outcome']
+
+        provided_to_testset['nickname'] = randomizer
+        provided_to_testset['passphrase_random'] = True
+        provided_to_testset['passphrase_length'] = randomizer
+        provided_to_testset['passphrase_character_set'] = randomizer
+        provided_to_testset['certificate_type'] = CertificateTypes.CLIENT
+        if tp_values == TestCertificateBuilder.TPValuesAssignment.DEFINED:
+            provided_to_testset['certificate_term'] = randomizer
+            provided_to_testset['certificate_subject_common_name'] = randomizer
+            provided_to_testset['certificate_alternative_names'] = randomizer
+            provided_to_testset['certificate_extra_extensions'] = []
+        elif tp_values == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             pass
         else:
             raise ValueError(f'Unexpected tp_values value: {tp_values}')
-        if tp_request == TestCertificateBuilder.TPRequest.CSR:
+        if tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
             pass
-        elif tp_request == TestCertificateBuilder.TPRequest.INSTANT:
+        elif tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
             pass
-        if tp_issuer == TestCertificateBuilder.TPIssuer.SELF:
+        if tp_issuer == TestCertificateBuilder.TPSigningKey.SELF:
             pass
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_ROOT:
-            testset_parameters['provided']['testset']['certificate_issuer_private_key'] = testset_ca_root.private_key
-            testset_parameters['provided']['testset']['certificate_issuer_subject'] = testset_ca_root.certificate_subject
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_1:
-            testset_parameters['provided']['testset']['certificate_issuer_private_key'] = testset_ca_intermediate_1.private_key
-            testset_parameters['provided']['testset']['certificate_issuer_subject'] = testset_ca_intermediate_1.certificate_subject
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_2:
-            testset_parameters['provided']['testset']['certificate_issuer_private_key'] = testset_ca_intermediate_2.private_key
-            testset_parameters['provided']['testset']['certificate_issuer_subject'] = testset_ca_intermediate_2.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_ROOT:
+            provided_to_testset['certificate_issuer_private_key'] = testset_ca_root.private_key
+            provided_to_testset['certificate_issuer_subject'] = testset_ca_root.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1:
+            provided_to_testset['certificate_issuer_private_key'] = testset_ca_intermediate_1.private_key
+            provided_to_testset['certificate_issuer_subject'] = testset_ca_intermediate_1.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2:
+            provided_to_testset['certificate_issuer_private_key'] = testset_ca_intermediate_2.private_key
+            provided_to_testset['certificate_issuer_subject'] = testset_ca_intermediate_2.certificate_subject
         else:
             raise ValueError(f'Unexpected tp_issuer value: {tp_issuer}')
 
-        testset = TestingSet(**testset_parameters['provided']['testset'])
+        testset = TestingSet(**provided_to_testset)
 
-        testset_parameters['provided']['builder']['nickname'] = testset.nickname
-        testset_parameters['expected']['builder']['nickname'] = testset.nickname
-        testset_parameters['expected']['outcome']['nickname'] = testset.nickname
-        testset_parameters['provided']['builder']['file'] = testset.certificate_file_name
-        testset_parameters['expected']['builder']['file'] = testset.certificate_file_name
-        testset_parameters['expected']['outcome']['file'] = testset.certificate_file_name
-        testset_parameters['provided']['builder']['private_key'] = testset.private_key
-        testset_parameters['expected']['builder']['private_key'] = testset.private_key
-        testset_parameters['expected']['outcome']['private_key'] = testset.private_key
-        testset_parameters['provided']['builder']['certificate_type'] = testset.certificate_type
-        testset_parameters['expected']['builder']['certificate_type'] = testset.certificate_type
-        testset_parameters['expected']['outcome']['certificate_type'] = testset.certificate_type
-        testset_parameters['provided']['builder']['subject'] = testset.certificate_subject
-        testset_parameters['expected']['builder']['subject'] = testset.certificate_subject
-        testset_parameters['expected']['outcome']['subject'] = testset.certificate_subject
-        if tp_values == TestCertificateBuilder.TPValues.DEFINED:
-            testset_parameters['provided']['builder']['term'] = testset.certificate_term
-            testset_parameters['expected']['builder']['term'] = testset.certificate_term
-            testset_parameters['expected']['outcome']['term'] = testset.certificate_term
-            testset_parameters['provided']['builder']['alternative_names'] = testset.certificate_alternative_names
-            testset_parameters['expected']['builder']['alternative_names'] = testset.certificate_alternative_names
-            testset_parameters['expected']['outcome']['alternative_names'] = testset.certificate_alternative_names
-            testset_parameters['provided']['builder']['extra_extensions'] = testset.certificate_extra_extensions
-            testset_parameters['expected']['builder']['extra_extensions'] = testset.certificate_extra_extensions
-            testset_parameters['expected']['outcome']['extra_extensions'] = testset.certificate_extra_extensions
-
-        elif tp_values == TestCertificateBuilder.TPValues.DEFAULT:
-            testset_parameters['expected']['builder']['term'] = None
-            testset_parameters['expected']['outcome']['term'] = Constants.DEFAULT_CERTIFICATE_TERM
-            testset_parameters['expected']['builder']['alternative_names'] = None
-            testset_parameters['expected']['outcome']['alternative_names'] = []
-            testset_parameters['expected']['builder']['extra_extensions'] = None
-            testset_parameters['expected']['outcome']['extra_extensions'] = []
+        provided_to_builder['nickname'] = testset.nickname
+        expected_in_builder['nickname'] = testset.nickname
+        expected_in_outcome['nickname'] = testset.nickname
+        provided_to_builder['file'] = testset.certificate_file_name
+        expected_in_builder['file'] = testset.certificate_file_name
+        expected_in_outcome['file'] = testset.certificate_file_name
+        provided_to_builder['private_key'] = testset.private_key
+        expected_in_builder['private_key'] = testset.private_key
+        expected_in_outcome['private_key'] = testset.private_key
+        provided_to_builder['certificate_type'] = testset.certificate_type
+        expected_in_builder['certificate_type'] = testset.certificate_type
+        expected_in_outcome['certificate_type'] = testset.certificate_type
+        provided_to_builder['subject'] = testset.certificate_subject
+        expected_in_builder['subject'] = testset.certificate_subject
+        expected_in_outcome['subject'] = testset.certificate_subject
+        if tp_values == TestCertificateBuilder.TPValuesAssignment.DEFINED:
+            provided_to_builder['term'] = testset.certificate_term
+            expected_in_builder['term'] = testset.certificate_term
+            expected_in_outcome['term'] = testset.certificate_term
+            provided_to_builder['alternative_names'] = testset.certificate_alternative_names
+            expected_in_builder['alternative_names'] = testset.certificate_alternative_names
+            expected_in_outcome['alternative_names'] = testset.certificate_alternative_names
+            provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
+            expected_in_builder['extra_extensions'] = testset.certificate_extra_extensions
+            expected_in_outcome['extra_extensions'] = testset.certificate_extra_extensions
+        elif tp_values == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
+            expected_in_builder['term'] = None
+            expected_in_outcome['term'] = Constants.DEFAULT_CERTIFICATE_TERM
+            expected_in_builder['alternative_names'] = None
+            expected_in_outcome['alternative_names'] = []
+            expected_in_builder['extra_extensions'] = None
+            expected_in_outcome['extra_extensions'] = []
         else:
             raise ValueError(f'Unexpected tp_values value: {tp_values}')
-        if tp_request == TestCertificateBuilder.TPRequest.CSR:
-            testset_parameters['provided']['builder']['certificate_signing_request'] = testset.certificate_signing_request
-            testset_parameters['expected']['builder']['certificate_signing_request'] = testset.certificate_signing_request
-        elif tp_request == TestCertificateBuilder.TPRequest.INSTANT:
-            testset_parameters['provided']['builder']['subject'] = testset.certificate_subject
-            testset_parameters['provided']['builder']['alternative_names'] = testset.certificate_alternative_names
-            testset_parameters['provided']['builder']['extra_extensions'] = testset.certificate_extra_extensions
-            testset_parameters['expected']['builder']['certificate_signing_request'] = None
+        if tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
+            provided_to_builder['certificate_signing_request'] = testset.certificate_signing_request
+            expected_in_builder['certificate_signing_request'] = testset.certificate_signing_request
+        elif tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
+            provided_to_builder['subject'] = testset.certificate_subject
+            provided_to_builder['alternative_names'] = testset.certificate_alternative_names
+            provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
+            expected_in_builder['certificate_signing_request'] = None
         else:
             raise ValueError(f'Unexpected tp_request value: {tp_request}')
-        if tp_issuer == TestCertificateBuilder.TPIssuer.SELF:
-            testset_parameters['expected']['builder']['issuer_private_key'] = None
-            testset_parameters['expected']['outcome']['issuer_private_key'] = testset.private_key
-            testset_parameters['expected']['builder']['issuer_subject'] = None
-            testset_parameters['expected']['outcome']['issuer_subject'] = testset.certificate_subject
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_ROOT:
-            testset_parameters['provided']['builder']['issuer_private_key'] = testset_ca_root.private_key
-            testset_parameters['expected']['builder']['issuer_private_key'] = testset_ca_root.private_key
-            testset_parameters['expected']['outcome']['issuer_private_key'] = testset_ca_root.private_key
-            testset_parameters['provided']['builder']['issuer_subject'] = testset_ca_root.certificate_subject
-            testset_parameters['expected']['builder']['issuer_subject'] = testset_ca_root.certificate_subject
-            testset_parameters['expected']['outcome']['issuer_subject'] = testset_ca_root.certificate_subject
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_1:
-            testset_parameters['provided']['builder']['issuer_private_key'] = testset_ca_intermediate_1.private_key
-            testset_parameters['expected']['builder']['issuer_private_key'] = testset_ca_intermediate_1.private_key
-            testset_parameters['expected']['outcome']['issuer_private_key'] = testset_ca_intermediate_1.private_key
-            testset_parameters['provided']['builder']['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
-            testset_parameters['expected']['builder']['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
-            testset_parameters['expected']['outcome']['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
-        elif tp_issuer == TestCertificateBuilder.TPIssuer.CA_INTERMEDIATE_2:
-            testset_parameters['provided']['builder']['issuer_private_key'] = testset_ca_intermediate_2.private_key
-            testset_parameters['expected']['builder']['issuer_private_key'] = testset_ca_intermediate_2.private_key
-            testset_parameters['expected']['outcome']['issuer_private_key'] = testset_ca_intermediate_2.private_key
-            testset_parameters['provided']['builder']['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
-            testset_parameters['expected']['builder']['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
-            testset_parameters['expected']['outcome']['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
+        if tp_issuer == TestCertificateBuilder.TPSigningKey.SELF:
+            expected_in_builder['issuer_private_key'] = None
+            expected_in_outcome['issuer_private_key'] = testset.private_key
+            expected_in_builder['issuer_subject'] = None
+            expected_in_outcome['issuer_subject'] = testset.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_ROOT:
+            provided_to_builder['issuer_private_key'] = testset_ca_root.private_key
+            expected_in_builder['issuer_private_key'] = testset_ca_root.private_key
+            expected_in_outcome['issuer_private_key'] = testset_ca_root.private_key
+            provided_to_builder['issuer_subject'] = testset_ca_root.certificate_subject
+            expected_in_builder['issuer_subject'] = testset_ca_root.certificate_subject
+            expected_in_outcome['issuer_subject'] = testset_ca_root.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1:
+            provided_to_builder['issuer_private_key'] = testset_ca_intermediate_1.private_key
+            expected_in_builder['issuer_private_key'] = testset_ca_intermediate_1.private_key
+            expected_in_outcome['issuer_private_key'] = testset_ca_intermediate_1.private_key
+            provided_to_builder['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
+            expected_in_builder['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
+            expected_in_outcome['issuer_subject'] = testset_ca_intermediate_1.certificate_subject
+        elif tp_issuer == TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2:
+            provided_to_builder['issuer_private_key'] = testset_ca_intermediate_2.private_key
+            expected_in_builder['issuer_private_key'] = testset_ca_intermediate_2.private_key
+            expected_in_outcome['issuer_private_key'] = testset_ca_intermediate_2.private_key
+            provided_to_builder['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
+            expected_in_builder['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
+            expected_in_outcome['issuer_subject'] = testset_ca_intermediate_2.certificate_subject
         else:
             raise ValueError(f'Unexpected tp_issuer value: {tp_issuer}')
 
@@ -437,43 +441,43 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             tp_request.value,
             tp_issuer.value,
         )
-        logging.debug('Parameters provided to the testset: %s', testset_parameters['provided']['testset'])
-        logging.debug('Parameters provided to the builder: %s', testset_parameters['provided']['builder'])
-        logging.debug('Parameters expected from the builder: %s', testset_parameters['expected']['builder'])
-        logging.debug('Parameters expected from the outcome: %s', testset_parameters['expected']['outcome'])
+        logging.debug('Parameters provided to the testset: %s', provided_to_testset)
+        logging.debug('Parameters provided to the builder: %s', provided_to_builder)
+        logging.debug('Parameters expected from the builder: %s', expected_in_builder)
+        logging.debug('Parameters expected from the outcome: %s', expected_in_outcome)
 
         certificate = None
 
         for tp_init in list(TestCertificateBuilder.TPInit):
 
-            if tp_configuring == TestCertificateBuilder.TPConfiguring.CONSTRUCTOR:
-                certificate_builder = CertificateBuilder(**testset_parameters['provided']['builder'])
-            elif tp_configuring == TestCertificateBuilder.TPConfiguring.RUNTIME:
+            if tp_configuring == TestCertificateBuilder.TPParametersPassing.CONSTRUCTOR:
+                certificate_builder = CertificateBuilder(**provided_to_builder)
+            elif tp_configuring == TestCertificateBuilder.TPParametersPassing.RUNTIME:
                 certificate_builder = CertificateBuilder()
-                for parameter_name, parameter_value in testset_parameters['provided']['builder'].items():
+                for parameter_name, parameter_value in provided_to_builder.items():
                     setattr(certificate_builder, parameter_name, parameter_value)
-            elif tp_configuring == TestCertificateBuilder.TPConfiguring.FINAL_CALL:
+            elif tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
                 certificate_builder = CertificateBuilder()
             else:
                 raise ValueError(f'Unknown test parameter value ({tp_configuring})')
 
-            if tp_configuring != TestCertificateBuilder.TPConfiguring.FINAL_CALL:
+            if tp_configuring != TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
                 self._test_builder(
                     _builder=certificate_builder,
-                    nickname=testset_parameters['expected']['builder']['nickname'],
+                    nickname=expected_in_builder['nickname'],
                     llo=(TT.NONE,),
-                    file=testset_parameters['expected']['builder']['file'],
+                    file=expected_in_builder['file'],
                     chain_file=(TT.NONE,),
-                    term=testset_parameters['expected']['builder']['term'],
+                    term=expected_in_builder['term'],
                     ca=(TT.NONE,),
-                    certificate_type=testset_parameters['expected']['builder']['certificate_type'],
-                    issuer_private_key=testset_parameters['expected']['builder']['issuer_private_key'],
-                    issuer_subject=testset_parameters['expected']['builder']['issuer_subject'],
-                    private_key=testset_parameters['expected']['builder']['private_key'],
-                    subject=testset_parameters['expected']['builder']['subject'],
-                    alternative_names=[testset_parameters['expected']['builder']['alternative_names']],
-                    extra_extensions=[testset_parameters['expected']['builder']['extra_extensions']],
-                    certificate_signing_request=testset_parameters['expected']['builder']['certificate_signing_request'],
+                    certificate_type=expected_in_builder['certificate_type'],
+                    issuer_private_key=expected_in_builder['issuer_private_key'],
+                    issuer_subject=expected_in_builder['issuer_subject'],
+                    private_key=expected_in_builder['private_key'],
+                    subject=expected_in_builder['subject'],
+                    alternative_names=[expected_in_builder['alternative_names']],
+                    extra_extensions=[expected_in_builder['extra_extensions']],
+                    certificate_signing_request=expected_in_builder['certificate_signing_request'],
                 )
             else:
                 self._test_builder(
@@ -495,74 +499,63 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 )
 
             if tp_init == TestCertificateBuilder.TPInit.NEW:
-                if tp_request == TestCertificateBuilder.TPRequest.INSTANT:
-                    if tp_configuring == TestCertificateBuilder.TPConfiguring.FINAL_CALL:
-                        certificate = certificate_builder.sign_instantly(**testset_parameters['provided']['builder'])
-                    else:
-                        certificate = certificate_builder.sign_instantly()
-                elif tp_request == TestCertificateBuilder.TPRequest.CSR:
-                    if tp_configuring == TestCertificateBuilder.TPConfiguring.FINAL_CALL:
-                        certificate = certificate_builder.sign_csr(**testset_parameters['provided']['builder'])
-                    else:
-                        certificate = certificate_builder.sign_csr()
+                if tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
+                    certificate = certificate_builder.sign_instantly(**(
+                        provided_to_builder
+                        if tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {}
+                    ))
+                elif tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
+                    certificate = certificate_builder.sign_csr(**(
+                        provided_to_builder
+                        if tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {})
+                   )
                 else:
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
-                self._test_certificate(
-                    _certificate=certificate,
-                    nickname=testset_parameters['expected']['outcome']['nickname'],
-                    llo=(TT.LAMBDA, [
-                        lambda x: x.public_key().public_numbers().n == testset_parameters['expected']['outcome']['private_key'].llo.public_key().public_numbers().n,
-                        lambda x: x.public_key().public_numbers().e == testset_parameters['expected']['outcome']['private_key'].llo.public_key().public_numbers().e,
-                        lambda x: x.subject == testset_parameters['expected']['outcome']['subject'],
-                        lambda x: x.issuer == testset_parameters['expected']['outcome']['issuer_subject'],
-                    ]),
-                    file=testset_parameters['expected']['outcome']['file'],
-                    chain_file=(TT.NONE,),
-                    certificate_type=testset_parameters['expected']['outcome']['certificate_type'],
-                    term=testset_parameters['expected']['outcome']['term'],
-                    ca=(TT.NONE,),
-                    issuer_private_key=testset_parameters['expected']['outcome']['issuer_private_key'],
-                    issuer_subject=testset_parameters['expected']['outcome']['issuer_subject'],
-                    private_key=testset_parameters['expected']['outcome']['private_key'],
-                    subject=testset_parameters['expected']['outcome']['subject'],
-                    alternative_names=[testset_parameters['expected']['outcome']['alternative_names']],
-                    extra_extensions=[testset_parameters['expected']['outcome']['extra_extensions']],
-                )
             elif tp_init == TestCertificateBuilder.TPInit.LOAD_LLO:
-                certificate = certificate_builder.init_with_llo(
+                certificate = CertificateBuilder().init_with_llo(
                     nickname=certificate.nickname,
+                    private_key=certificate.private_key,
                     file=certificate.file,
                     llo=certificate.llo
                 )
             elif tp_init == TestCertificateBuilder.TPInit.LOAD_FILE:
-                certificate = certificate_builder.init_with_file(
+                certificate = CertificateBuilder().init_with_file(
                     nickname=certificate.nickname,
+                    private_key=certificate.private_key,
                     file=certificate.file,
-                )
-                self._test_certificate(
-                    _certificate=certificate,
-                    nickname=testset_parameters['expected']['outcome']['nickname'],
-                    llo=(TT.LAMBDA, [
-                        lambda x: x.public_key().public_numbers().n == testset_parameters['expected']['outcome']['private_key'].llo.public_key().public_numbers().n,
-                        lambda x: x.public_key().public_numbers().e == testset_parameters['expected']['outcome']['private_key'].llo.public_key().public_numbers().e,
-                        lambda x: x.subject == testset_parameters['expected']['outcome']['subject'],
-                        lambda x: x.issuer == testset_parameters['expected']['outcome']['issuer_subject'],
-                    ]),
-                    file=testset_parameters['expected']['outcome']['file'],
-                    chain_file=(TT.NONE,),
-                    certificate_type=testset_parameters['expected']['outcome']['certificate_type'],
-                    term=testset_parameters['expected']['outcome']['term'],
-                    ca=(TT.NONE,),
-                    issuer_private_key=(TT.NONE,),
-                    issuer_subject=(TT.NONE,),
-                    private_key=testset_parameters['expected']['outcome']['private_key'],
-                    subject=testset_parameters['expected']['outcome']['subject'],
-                    alternative_names=[testset_parameters['expected']['outcome']['alternative_names']],
-                    extra_extensions=[testset_parameters['expected']['outcome']['extra_extensions']],
                 )
             else:
                 raise ValueError(f'Unknown test parameter value ({tp_init})')
 
+            self._test_certificate(
+                _certificate=certificate,
+                nickname=expected_in_outcome['nickname'],
+                llo=(TT.LAMBDA, [
+                    lambda x: x.public_key().public_numbers().n == expected_in_outcome['private_key'].llo.public_key().public_numbers().n,
+                    lambda x: x.public_key().public_numbers().e == expected_in_outcome['private_key'].llo.public_key().public_numbers().e,
+                    lambda x: x.subject == expected_in_outcome['subject'],
+                    lambda x: x.issuer == expected_in_outcome['issuer_subject'],
+                ]),
+                file=expected_in_outcome['file'],
+                chain_file=(TT.NONE,),
+                certificate_type=expected_in_outcome['certificate_type'],
+                term=expected_in_outcome['term'],
+                ca=(TT.NONE,),
+                issuer_private_key=
+                    expected_in_outcome['issuer_private_key']
+                    if tp_init == TestCertificateBuilder.TPInit.NEW
+                    else (TT.NONE,),
+                issuer_subject=
+                    expected_in_outcome['issuer_subject']
+                    if tp_init == TestCertificateBuilder.TPInit.NEW
+                    else (TT.NONE,),
+                private_key=expected_in_outcome['private_key'],
+                subject=expected_in_outcome['subject'],
+                alternative_names=[expected_in_outcome['alternative_names']],
+                extra_extensions=[expected_in_outcome['extra_extensions']],
+            )
 
     #
     # Test parametrization
