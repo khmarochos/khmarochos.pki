@@ -144,31 +144,28 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             issuer_private_key = private_key
         if issuer_subject is None:
             issuer_subject = subject
+        certificate_llo = self.build(
+            builder=x509.CertificateBuilder(),
+            issuer_private_key=issuer_private_key,
+            issuer_subject=issuer_subject,
+            private_key=private_key,
+            certificate_type=certificate_type,
+            term=term,
+            subject=subject,
+            alternative_names=alternative_names,
+            extra_extensions=extra_extensions
+        )
         certificate = Certificate(
             nickname=nickname,
             file=file,
             chain_file=chain_file,
-            llo=self.build(
-                builder=x509.CertificateBuilder(),
-                issuer_private_key=issuer_private_key,
-                issuer_subject=issuer_subject,
-                private_key=private_key,
-                certificate_type=certificate_type,
-                term=term,
-                subject=subject,
-                alternative_names=alternative_names,
-                extra_extensions=extra_extensions
-            ),
-            certificate_type=certificate_type,
-            term=term,
+            llo=certificate_llo,
             ca=ca,
             issuer_private_key=issuer_private_key,
             issuer_subject=issuer_subject,
-            subject=subject,
-            alternative_names=alternative_names,
-            extra_extensions=extra_extensions,
             private_key=private_key,
         )
+        certificate.anatomize_llo()
         certificate.save()
         certificate.save_chain()
         return certificate
@@ -252,31 +249,28 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             warnings.warn(f'The extra_extensions parameter is given as {extra_extensions} '
                           'but the certificate signing request supposes a different extra extensions which are '
                           f'{certificate_signing_request.extra_extensions}', RuntimeWarning)
+        certificate_llo = self.build(
+            builder=x509.CertificateBuilder(),
+            issuer_private_key=issuer_private_key,
+            issuer_subject=issuer_subject,
+            private_key=private_key,
+            certificate_type=certificate_type,
+            term=term,
+            subject=subject,
+            alternative_names=alternative_names,
+            extra_extensions=extra_extensions
+        )
         certificate = Certificate(
             nickname=nickname,
             file=file,
             chain_file=chain_file,
-            llo=self.build(
-                builder=x509.CertificateBuilder(),
-                issuer_private_key=issuer_private_key,
-                issuer_subject=issuer_subject,
-                private_key=private_key,
-                certificate_type=certificate_type,
-                term=term,
-                subject=subject,
-                alternative_names=alternative_names,
-                extra_extensions=extra_extensions
-            ),
-            certificate_type=certificate_type,
-            term=term,
+            llo=certificate_llo,
             ca=ca,
             issuer_private_key=issuer_private_key,
             issuer_subject=issuer_subject,
-            subject=subject,
-            alternative_names=alternative_names,
-            extra_extensions=extra_extensions,
             private_key=private_key,
         )
+        certificate.anatomize_llo()
         certificate.save()
         certificate.save_chain()
         return certificate

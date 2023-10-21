@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import subprocess
 import sys
 import unittest
 import logging
@@ -35,14 +35,13 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import 
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key_builder import PrivateKeyBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase_builder import PassphraseBuilder
 from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import BuilderTestType as TT, \
-    TestingSet, Randomizer
+    TestingSet, Randomizer, StopAfter
 from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import BuilderCheckList
 from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import AbstractBuilderTest
 
 
-# noinspection SpellCheckingInspection
+# noinspection SpellCheckingInspection,DuplicatedCode
 class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
-
     class TPParametersPassing(Enum):
         CONSTRUCTOR = 'passing parameters to the constructor'
         RUNTIME = 'adding parameters at runtime'
@@ -85,17 +84,17 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                         tp_signing_key
                     ))
 
-    DOMAIN_NAME = 'kloudster.com'
-
     @classmethod
     def setUpClass(cls) -> None:
         logging.basicConfig(level=logging.DEBUG, handlers=[logging.StreamHandler(sys.stdout)])
 
-    # def setUp(self) -> None:
-    #     self.testing_set = TestingSet()
-
-    # def tearDown(self) -> None:
-    #     del self.testing_set
+    def setUp(self):
+        try:
+            subprocess.run(['openssl', 'version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        except FileNotFoundError:
+            self.openssl_available = False
+        else:
+            self.openssl_available = True
 
     def _test_builder(
             self,
@@ -168,7 +167,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         )
 
     @parameterized.expand(PARAMETER_SETS)
-    def test_everything(self, name, tp_configuring, tp_values, tp_request, tp_issuer):
+    def test_everything(self, name, tp_parameters_passing, tp_values_assignment, tp_request, tp_issuer):
 
         randomizer = Randomizer()
 
@@ -178,6 +177,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2
         ):
             testset_ca_root = TestingSet(
+                stop_after=StopAfter.CERTIFICATE,
                 nickname=randomizer,
                 passphrase_random=True,
                 passphrase_length=randomizer,
@@ -223,6 +223,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2
         ):
             testset_ca_intermediate_1 = TestingSet(
+                stop_after=StopAfter.CERTIFICATE,
                 nickname=randomizer,
                 passphrase_random=True,
                 passphrase_length=randomizer,
@@ -269,6 +270,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2,
         ):
             testset_ca_intermediate_2 = TestingSet(
+                stop_after=StopAfter.CERTIFICATE,
                 nickname=randomizer,
                 passphrase_random=True,
                 passphrase_length=randomizer,
@@ -331,15 +333,16 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         provided_to_testset['passphrase_length'] = randomizer
         provided_to_testset['passphrase_character_set'] = randomizer
         provided_to_testset['certificate_type'] = CertificateTypes.CLIENT
-        if tp_values == TestCertificateBuilder.TPValuesAssignment.DEFINED:
+        if tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFINED:
             provided_to_testset['certificate_term'] = randomizer
             provided_to_testset['certificate_subject_common_name'] = randomizer
+            provided_to_testset['certificate_alternative_names_number'] = randomizer
             provided_to_testset['certificate_alternative_names'] = randomizer
             provided_to_testset['certificate_extra_extensions'] = []
-        elif tp_values == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
+        elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             pass
         else:
-            raise ValueError(f'Unexpected tp_values value: {tp_values}')
+            raise ValueError(f'Unexpected tp_values value: {tp_values_assignment}')
         if tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
             pass
         elif tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
@@ -358,7 +361,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         else:
             raise ValueError(f'Unexpected tp_issuer value: {tp_issuer}')
 
-        testset = TestingSet(**provided_to_testset)
+        testset = TestingSet(stop_after=StopAfter.CERTIFICATE, **provided_to_testset)
 
         provided_to_builder['nickname'] = testset.nickname
         expected_in_builder['nickname'] = testset.nickname
@@ -375,7 +378,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         provided_to_builder['subject'] = testset.certificate_subject
         expected_in_builder['subject'] = testset.certificate_subject
         expected_in_outcome['subject'] = testset.certificate_subject
-        if tp_values == TestCertificateBuilder.TPValuesAssignment.DEFINED:
+        if tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFINED:
             provided_to_builder['term'] = testset.certificate_term
             expected_in_builder['term'] = testset.certificate_term
             expected_in_outcome['term'] = testset.certificate_term
@@ -385,7 +388,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_outcome['extra_extensions'] = testset.certificate_extra_extensions
-        elif tp_values == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
+        elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             expected_in_builder['term'] = None
             expected_in_outcome['term'] = Constants.DEFAULT_CERTIFICATE_TERM
             expected_in_builder['alternative_names'] = None
@@ -393,7 +396,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             expected_in_builder['extra_extensions'] = None
             expected_in_outcome['extra_extensions'] = []
         else:
-            raise ValueError(f'Unexpected tp_values value: {tp_values}')
+            raise ValueError(f'Unexpected tp_values value: {tp_values_assignment}')
         if tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
             provided_to_builder['certificate_signing_request'] = testset.certificate_signing_request
             expected_in_builder['certificate_signing_request'] = testset.certificate_signing_request
@@ -436,8 +439,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         logging.debug(
             '%s: %s; %s; %s; %s.',
             name,
-            tp_configuring.value,
-            tp_values.value,
+            tp_parameters_passing.value,
+            tp_values_assignment.value,
             tp_request.value,
             tp_issuer.value,
         )
@@ -450,18 +453,18 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
 
         for tp_init in list(TestCertificateBuilder.TPInit):
 
-            if tp_configuring == TestCertificateBuilder.TPParametersPassing.CONSTRUCTOR:
+            if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.CONSTRUCTOR:
                 certificate_builder = CertificateBuilder(**provided_to_builder)
-            elif tp_configuring == TestCertificateBuilder.TPParametersPassing.RUNTIME:
+            elif tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.RUNTIME:
                 certificate_builder = CertificateBuilder()
                 for parameter_name, parameter_value in provided_to_builder.items():
                     setattr(certificate_builder, parameter_name, parameter_value)
-            elif tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
+            elif tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
                 certificate_builder = CertificateBuilder()
             else:
-                raise ValueError(f'Unknown test parameter value ({tp_configuring})')
+                raise ValueError(f'Unknown test parameter value ({tp_parameters_passing})')
 
-            if tp_configuring != TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
+            if tp_parameters_passing != TestCertificateBuilder.TPParametersPassing.FINAL_CALL:
                 self._test_builder(
                     _builder=certificate_builder,
                     nickname=expected_in_builder['nickname'],
@@ -502,15 +505,15 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 if tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
                     certificate = certificate_builder.sign_instantly(**(
                         provided_to_builder
-                        if tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
                         else {}
                     ))
                 elif tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
                     certificate = certificate_builder.sign_csr(**(
                         provided_to_builder
-                        if tp_configuring == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
                         else {})
-                   )
+                                                               )
                 else:
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
             elif tp_init == TestCertificateBuilder.TPInit.LOAD_LLO:
@@ -543,638 +546,26 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=expected_in_outcome['certificate_type'],
                 term=expected_in_outcome['term'],
                 ca=(TT.NONE,),
-                issuer_private_key=
-                    expected_in_outcome['issuer_private_key']
-                    if tp_init == TestCertificateBuilder.TPInit.NEW
-                    else (TT.NONE,),
-                issuer_subject=
-                    expected_in_outcome['issuer_subject']
-                    if tp_init == TestCertificateBuilder.TPInit.NEW
-                    else (TT.NONE,),
+                issuer_private_key=(
+                    expected_in_outcome['issuer_private_key'] if tp_init == TestCertificateBuilder.TPInit.NEW
+                    else (TT.NONE,)
+                ),
+                issuer_subject=(
+                    expected_in_outcome['issuer_subject'] if tp_init == TestCertificateBuilder.TPInit.NEW
+                    else (TT.NONE,)
+                ),
                 private_key=expected_in_outcome['private_key'],
                 subject=expected_in_outcome['subject'],
                 alternative_names=[expected_in_outcome['alternative_names']],
                 extra_extensions=[expected_in_outcome['extra_extensions']],
             )
 
-    #
-    # Test parametrization
-    #
+            logging.debug('Certificate: %s', certificate)
 
-    # Test parameters passed to the constructor
-
-    # def test_parameters_passed_to_constructor(self):
-    #     testset = self.testing_set
-    #     # with self.assertWarns(RuntimeWarning):
-    #     certificate_builder = CertificateBuilder(
-    #         nickname=testset.nickname,
-    #         file=testset.certificate_file_name,
-    #         private_key=testset.private_key,
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         certificate_signing_request=testset.certificate_signing_request,
-    #     )
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=testset.nickname,
-    #         llo=(TT.NONE,),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=testset.private_key,
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=testset.certificate_signing_request,
-    #     )
-    #     with self.assertWarnsRegex(
-    #             expected_warning=RuntimeWarning,
-    #             expected_regex=r'the certificate signing request supposes a different type'
-    #     ):
-    #         certificate = certificate_builder.sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=self.testing_set.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[],
-    #     )
-    #
-    # def test_parameters_passed_to_constructor_with_default_values(self):
-    #     testset = self.testing_set
-    #     certificate_builder = CertificateBuilder(
-    #         nickname=testset.nickname,
-    #         file=testset.certificate_file_name,
-    #         private_key=testset.private_key,
-    #         certificate_signing_request=testset.certificate_signing_request
-    #     )
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=testset.nickname,
-    #         llo=(TT.NONE,),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=testset.private_key,
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=testset.certificate_signing_request
-    #     )
-    #     certificate = certificate_builder.sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_parameters_added_at_runtime(self):
-    #     testset = self.testing_set
-    #     certificate_builder = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #         .add_term(testset.term) \
-    #         .add_certificate_signing_request(testset.certificate_signing_request)
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=testset.nickname,
-    #         llo=(TT.NONE,),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=testset.private_key,
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=testset.certificate_signing_request,
-    #     )
-    #     with self.assertWarnsRegex(
-    #             expected_warning=RuntimeWarning,
-    #             expected_regex=r'the certificate signing request supposes a different type'
-    #     ):
-    #         certificate = certificate_builder.sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_parameters_added_at_runtime_with_default_values(self):
-    #     testset = self.testing_set
-    #     certificate_builder = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_signing_request(testset.certificate_signing_request)
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=testset.nickname,
-    #         llo=(TT.NONE,),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=testset.private_key,
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=testset.certificate_signing_request,
-    #     )
-    #     certificate = certificate_builder.sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_parameters_passed_with_final_call(self):
-    #     testset = self.testing_set
-    #     with self.assertWarnsRegex(
-    #             expected_warning=RuntimeWarning,
-    #             expected_regex=r'the certificate signing request supposes a different type'
-    #     ):
-    #         certificate = CertificateBuilder() \
-    #             .sign_csr(
-    #             nickname=testset.nickname,
-    #             file=testset.certificate_file_name,
-    #             private_key=testset.private_key,
-    #             certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #             term=testset.term,
-    #             certificate_signing_request=testset.certificate_signing_request
-    #         )
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_parameters_passed_with_final_call_with_default_values(self):
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .sign_csr(
-    #         nickname=testset.nickname,
-    #         file=testset.certificate_file_name,
-    #         private_key=testset.private_key,
-    #         certificate_signing_request=testset.certificate_signing_request
-    #     )
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_sign_csr(self):
-    #     testset = self.testing_set
-    #     with self.assertWarnsRegex(
-    #             expected_warning=RuntimeWarning,
-    #             expected_regex=r'the certificate signing request supposes a different type'
-    #     ):
-    #         certificate = CertificateBuilder() \
-    #             .add_nickname(testset.nickname) \
-    #             .add_file(testset.certificate_file_name) \
-    #             .add_private_key(testset.private_key) \
-    #             .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #             .add_subject(testset.subject) \
-    #             .add_alternative_names(testset.alternativeNames) \
-    #             .add_term(testset.term) \
-    #             .add_certificate_signing_request(testset.certificate_signing_request) \
-    #             .sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[],
-    #     )
-    #
-    # def test_sign_csr_with_default_values(self):
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_signing_request(testset.certificate_signing_request) \
-    #         .sign_csr()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[],
-    #     )
-    #
-    # def test_sign_instantly(self):
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #         .add_subject(testset.subject) \
-    #         .add_alternative_names(testset.alternativeNames) \
-    #         .add_term(testset.term) \
-    #         .sign_instantly()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_sign_instantly_with_default_values(self):
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_subject(testset.subject) \
-    #         .sign_instantly()
-    #     self._test_certificate(
-    #         _certificate=certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == testset.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset.private_key,
-    #         issuer_subject=testset.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_sign_csr_by_ca(self):
-    #     testset_ca = TestingSet(
-    #         subject=CertificateBuilder.compose_subject(
-    #             country_name='PL',
-    #             state_or_province_name='Malopolskie',
-    #             locality_name='Krakow',
-    #             organization_name='TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA',
-    #             organizational_unit_name='Security Service',
-    #             email_address=f'security@{DOMAIN_NAME}',
-    #             common_name='Root CA'
-    #         )
-    #     )
-    #     certificate_ca = CertificateBuilder() \
-    #         .add_nickname(testset_ca.nickname) \
-    #         .add_file(testset_ca.certificate_file_name) \
-    #         .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #         .add_private_key(testset_ca.private_key) \
-    #         .add_subject(testset_ca.subject) \
-    #         .sign_instantly()
-    #     self._test_certificate(
-    #         certificate_ca,
-    #         nickname=testset_ca.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda
-    #                 x: x.public_key().public_numbers().n == testset_ca.private_key.llo.public_key().public_numbers().n,
-    #             lambda
-    #                 x: x.public_key().public_numbers().e == testset_ca.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset_ca.subject,
-    #             lambda x: x.issuer == testset_ca.subject,
-    #         ]),
-    #         file=testset_ca.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset_ca.private_key,
-    #         issuer_subject=testset_ca.subject,
-    #         private_key=testset_ca.private_key,
-    #         subject=testset_ca.subject,
-    #         alternative_names=[],
-    #         extra_extensions=[]
-    #     )
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_chain_file(testset.certificate_chain_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_signing_request(testset.certificate_signing_request) \
-    #         .add_issuer_private_key(certificate_ca.private_key) \
-    #         .add_issuer_subject(certificate_ca.subject) \
-    #         .sign_csr()
-    #     self._test_certificate(
-    #         certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == certificate_ca.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=testset.certificate_chain_file_name,
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=certificate_ca.private_key,
-    #         issuer_subject=certificate_ca.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_sign_instantly_by_ca(self):
-    #     testset_ca = TestingSet(
-    #         subject=CertificateBuilder.compose_subject(
-    #             country_name='PL',
-    #             state_or_province_name='Malopolskie',
-    #             locality_name='Krakow',
-    #             organization_name='TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA',
-    #             organizational_unit_name='Security Service',
-    #             email_address=f'security@{DOMAIN_NAME}',
-    #             common_name='Root CA'
-    #         )
-    #     )
-    #     certificate_ca = CertificateBuilder() \
-    #         .add_nickname(testset_ca.nickname) \
-    #         .add_file(testset_ca.certificate_file_name) \
-    #         .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #         .add_private_key(testset_ca.private_key) \
-    #         .add_subject(testset_ca.subject) \
-    #         .sign_instantly()
-    #     self._test_certificate(
-    #         certificate_ca,
-    #         nickname=testset_ca.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda
-    #                 x: x.public_key().public_numbers().n == testset_ca.private_key.llo.public_key().public_numbers().n,
-    #             lambda
-    #                 x: x.public_key().public_numbers().e == testset_ca.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset_ca.subject,
-    #             lambda x: x.issuer == testset_ca.subject,
-    #         ]),
-    #         file=testset_ca.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=testset_ca.private_key,
-    #         issuer_subject=testset_ca.subject,
-    #         private_key=testset_ca.private_key,
-    #         subject=testset_ca.subject,
-    #         alternative_names=[],
-    #         extra_extensions=[]
-    #     )
-    #     testset = self.testing_set
-    #     certificate = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_chain_file(testset.certificate_chain_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_issuer_private_key(certificate_ca.private_key) \
-    #         .add_issuer_subject(certificate_ca.subject) \
-    #         .add_certificate_type(CertificateTypes.CLIENT) \
-    #         .add_subject(testset.subject) \
-    #         .add_alternative_names(testset.alternativeNames) \
-    #         .add_term(testset.term) \
-    #         .sign_instantly()
-    #     self._test_certificate(
-    #         certificate,
-    #         nickname=testset.nickname,
-    #         llo=(TT.LAMBDA, [
-    #             lambda x: x.public_key().public_numbers().n == testset.private_key.llo.public_key().public_numbers().n,
-    #             lambda x: x.public_key().public_numbers().e == testset.private_key.llo.public_key().public_numbers().e,
-    #             lambda x: x.subject == testset.subject,
-    #             lambda x: x.issuer == certificate_ca.subject,
-    #         ]),
-    #         file=testset.certificate_file_name,
-    #         chain_file=testset.certificate_chain_file_name,
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=certificate_ca.private_key,
-    #         issuer_subject=certificate_ca.subject,
-    #         private_key=testset.private_key,
-    #         subject=testset.subject,
-    #         alternative_names=[testset.alternativeNames],
-    #         extra_extensions=[]
-    #     )
-    #
-    # def test_reset(self, **kwargs):
-    #     testset = self.testing_set
-    #     certificate_builder = CertificateBuilder()
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=(TT.NONE,),
-    #         llo=(TT.NONE,),
-    #         file=(TT.NONE,),
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=(TT.NONE,),
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=(TT.NONE,)
-    #     )
-    #     certificate_builder = CertificateBuilder() \
-    #         .add_nickname(testset.nickname) \
-    #         .add_file(testset.certificate_file_name) \
-    #         .add_private_key(testset.private_key) \
-    #         .add_certificate_type(CertificateTypes.CA_INTERMEDIATE) \
-    #         .add_term(testset.term) \
-    #         .add_certificate_signing_request(testset.certificate_signing_request)
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=testset.nickname,
-    #         llo=(TT.NONE,),
-    #         file=testset.certificate_file_name,
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CA_INTERMEDIATE,
-    #         term=testset.term,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=testset.private_key,
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=testset.certificate_signing_request
-    #     )
-    #     certificate_builder.reset()
-    #     self._test_builder(
-    #         _builder=certificate_builder,
-    #         nickname=(TT.NONE,),
-    #         llo=(TT.NONE,),
-    #         file=(TT.NONE,),
-    #         chain_file=(TT.NONE,),
-    #         certificate_type=CertificateTypes.CLIENT,
-    #         term=Constants.DEFAULT_CERTIFICATE_TERM,
-    #         ca=(TT.NONE,),
-    #         issuer_private_key=(TT.NONE,),
-    #         issuer_subject=(TT.NONE,),
-    #         private_key=(TT.NONE,),
-    #         subject=(TT.NONE,),
-    #         alternative_names=(TT.NONE,),
-    #         extra_extensions=(TT.NONE,),
-    #         certificate_signing_request=(TT.NONE,)
-    #     )
+        if self.openssl_available:
+            openssl_completed = subprocess.run(
+                ['openssl', 'x509', '-in', certificate.file, '-text', '-noout'],
+                check=True,
+                capture_output=True,
+            )
+            logging.debug('Certificate information:\n%s', openssl_completed.stdout.decode('utf-8'))

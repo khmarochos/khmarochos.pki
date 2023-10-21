@@ -68,12 +68,12 @@ class Certificate(FlexiClass, properties={
             self.extra_extensions = []
         for extension in self.llo.extensions:
             if extension.oid == x509.oid.ExtensionOID.BASIC_CONSTRAINTS:
-                with self.ignore_readonly('type'):
+                with self.ignore_readonly('certificate_type'):
                     if extension.value.ca:
                         if extension.value.path_length == 0:
-                            self.type = CertificateTypes.CA_STUBBY
+                            self.certificate_type = CertificateTypes.CA_STUBBY
                         else:
-                            self.type = CertificateTypes.CA_INTERMEDIATE
+                            self.certificate_type = CertificateTypes.CA_INTERMEDIATE
             elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
                 with self.ignore_readonly('alternative_names'):
                     self.alternative_names = extension.value.get_values_for_type(x509.DNSName)

@@ -19,9 +19,11 @@ import unittest
 import warnings
 from enum import Enum
 from abc import ABC, abstractmethod
+from math import log
 from typing import TypeVar, Any, Tuple, Union, List
 
 from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass \
     import FlexiClass
@@ -55,12 +57,15 @@ DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME = 'TUCHA SPOLKA Z OGRANICZONA ODPO
 DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME = 'Security Service'
 DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS = f'security@{DOMAIN_NAME}'
 DEFAULT_CERTIFICATE_SUBJECT_COMMON_NAME = f'security.{DOMAIN_NAME}'
+DEFAULT_CERTIFICATE_ALTERNATIVE_NAMES_NUMBER = 5
 RANDOM_STRING_MIN_LENGTH = 16
 RANDOM_STRING_MAX_LENGTH = 32
 RANDOM_STRING_CHARSET = ''.join([chr(i) for i in range(0x21, 0x7F)])
 RANDON_NICKNAME_MIN_LENGTH = 8
 RANDOM_NICKNAME_MAX_LENGTH = 32
 RANDOM_NICKNAME_CHARACTER_SET = 'abcdefghijklmnopqrstuvwxyz'
+RANDOM_PRIVATE_KEY_SIZE_POWER_MIN = 9
+RANDOM_PRIVATE_KEY_SIZE_POWER_MAX = 13
 RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_MIN_LENGTH = 8
 RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_MAX_LENGTH = 32
 RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_CHARACTER_SET = 'abcdefghijklmnopqrstuvwxyz'
@@ -86,12 +91,14 @@ class BuilderTestType(Enum):
     NOT_IN = 'not_in'
     LAMBDA = 'lambda'
 
+
 class StopAfter(Enum):
-    DO_NOT_RUN = 0,
-    PASSPHRASE = 1,
-    PRIVATE_KEY = 2,
-    CERTIFICATE_SIGNING_REQUEST = 3,
+    DO_NOT_RUN = 0
+    PASSPHRASE = 1
+    PRIVATE_KEY = 2
+    CERTIFICATE_SIGNING_REQUEST = 3
     CERTIFICATE = 4
+
 
 __T = TypeVar("__T")
 BuilderCheckListElement = Union[Tuple[BuilderTestType], Tuple[BuilderTestType, Any], __T]
@@ -139,15 +146,39 @@ class Randomizer(FlexiClass, properties={
 
     def _random_string(self, length: int = None, character_set: str = None) -> str:
         if length is None:
-            length: int = self._random_number(self.min_random_string_length, self.max_random_string_length)
+            length: int = self._random_number(
+                self.min_random_string_length,
+                self.max_random_string_length
+            )
         if character_set is None:
             character_set: str = self.character_set
         return ''.join(secrets.choice(character_set) for _ in range(length))
 
-    def randomize_nickname(self, length: int = None, character_set: str = None) -> str:
-        return self._random_string(length=length, character_set=RANDOM_NICKNAME_CHARACTER_SET)
+    def randomize_nickname(self, length: int = None, character_set: str = RANDOM_NICKNAME_CHARACTER_SET) -> str:
+        if length is None:
+            length = self._random_number(
+                RANDON_NICKNAME_MIN_LENGTH,
+                RANDOM_NICKNAME_MAX_LENGTH
+            )
+        return self._random_string(length=length, character_set=character_set)
 
-    def randomize_certificate_subject_common_name(self, length: int = None, character_set: str = None) -> str:
+    def randomize_private_key_size(
+            self,
+            min_size: int = RANDOM_PRIVATE_KEY_SIZE_POWER_MIN,
+            max_size: int = RANDOM_PRIVATE_KEY_SIZE_POWER_MAX
+    ) -> int:
+        return 2 ** self._random_number(min_size, max_size, disallowed=[log(Constants.DEFAULT_PRIVATE_KEY_SIZE), 2])
+
+    def randomize_private_key_exponent(self) -> int:
+        options = [3, 65537]
+        return options[self._random_number(0, len(options) - 1, disallowed=[options.index(Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT)])]
+
+    def randomize_certificate_subject_common_name(self, length: int = None, character_set: str = RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_CHARACTER_SET) -> str:
+        if length is None:
+            length = self._random_number(
+                RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_MIN_LENGTH,
+                RANDOM_CERTIFICATE_SUBJECT_COMMON_NAME_MAX_LENGTH
+            )
         return self._random_string(length=length, character_set=character_set) + '.' + DOMAIN_NAME
 
     def randomize_certificate_term(
@@ -156,6 +187,13 @@ class Randomizer(FlexiClass, properties={
             max_term: int = MAX_RANDOM_CERTIFICATE_TERM
     ) -> int:
         return self._random_number(min_term, max_term, disallowed=[Constants.DEFAULT_CERTIFICATE_TERM])
+
+    def randomize_certificate_alternative_names_number(
+            self,
+            min_number: int = 1,
+            max_number: int = 5
+    ) -> int:
+        return self._random_number(min_number, max_number)
 
     def randomize_passphrase_length(
             self,
@@ -213,6 +251,10 @@ class TestingSet(FlexiClass, properties={
     'private_key': {'type': PrivateKey},
     'private_key_file': {'type': tempfile._TemporaryFileWrapper},
     'private_key_file_name': {},
+    'private_key_size': {'type': Union[int, Randomizer]},
+    'private_key_public_exponent': {'type': Union[int, Randomizer]},
+    'private_key_encrypted': {'type': bool},
+    'private_key_encryption_algorithm': {'type': serialization.KeySerializationEncryption},
     'certificate_signing_request': {'type': CertificateSigningRequest},
     'certificate_signing_request_file': {'type': tempfile._TemporaryFileWrapper},
     'certificate_signing_request_file_name': {},
@@ -226,7 +268,7 @@ class TestingSet(FlexiClass, properties={
     'certificate_subject': {'type': x509.name.Name},
     'certificate_subject_common_name': {'type': Union[str, Randomizer]},
     'certificate_alternative_names': {'type': Union[list, Randomizer]},
-    'certificate_alternative_names_number': {'type': int, 'default': 5},
+    'certificate_alternative_names_number': {'type': Union[int, Randomizer]},
     'certificate_extra_extensions': {'type': list},
     'certificate_issuer_private_key': {'type': PrivateKey},
     'certificate_issuer_subject': {'type': x509.name.Name},
@@ -282,6 +324,23 @@ class TestingSet(FlexiClass, properties={
                     )
                 with self.ignore_readonly('private_key_file_name'):
                     self.private_key_file_name = self.private_key_file.name
+            if isinstance(self.private_key_size, Randomizer):
+                with self.ignore_readonly('private_key_size'):
+                    self.private_key_size = self.private_key_size.randomize_private_key_size()
+            if isinstance(self.private_key_public_exponent, Randomizer):
+                with self.ignore_readonly('private_key_public_exponent'):
+                    self.private_key_public_exponent = self.private_key_public_exponent.randomize_private_key_exponent()
+            # if self.private_key_encrypted is None:
+            #     with self.ignore_readonly('private_key_encrypted'):
+            #         self.private_key_encrypted = Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED
+            if self.private_key_encryption_algorithm is None:
+                with self.ignore_readonly('private_key_encryption_algorithm'):
+                    if self.private_key_encrypted:
+                        self.private_key_encryption_algorithm = serialization.BestAvailableEncryption(
+                            self.passphrase.lookup().encode()
+                        )
+                    else:
+                        self.private_key_encryption_algorithm = serialization.NoEncryption()
 
         if self.stop_after.value >= StopAfter.CERTIFICATE_SIGNING_REQUEST.value:
             # The certificate signing request-related parameters
@@ -324,9 +383,15 @@ class TestingSet(FlexiClass, properties={
                         x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.nickname + '.' + DOMAIN_NAME),
                     ])
             # ...certificate_alternative_names
+            if isinstance(self.certificate_alternative_names_number, Randomizer):
+                with self.ignore_readonly('certificate_alternative_names_number'):
+                    self.certificate_alternative_names_number = self.certificate_alternative_names_number.randomize_certificate_alternative_names_number()
+            if self.certificate_alternative_names_number is None:
+                with self.ignore_readonly('certificate_alternative_names_number'):
+                    self.certificate_alternative_names_number = DEFAULT_CERTIFICATE_ALTERNATIVE_NAMES_NUMBER
             if isinstance(self.certificate_alternative_names, Randomizer):
                 certificate_alternative_names = []
-                for _ in range(0, self.certificate_alternative_names_number - 1):
+                for _ in range(0, self.certificate_alternative_names_number):
                     certificate_alternative_names.append(self.certificate_alternative_names.randomize_certificate_subject_common_name())
                 with self.ignore_readonly('certificate_alternative_names'):
                     self.certificate_alternative_names = certificate_alternative_names
@@ -368,12 +433,17 @@ class TestingSet(FlexiClass, properties={
 
         if self.stop_after.value >= StopAfter.PASSPHRASE.value:
             # Generating the passphrase
-            passphrase_builder = PassphraseBuilder() \
-                .add_file(self.passphrase_file_name) \
-                .add_random(self.passphrase_random) \
-                .add_length(self.passphrase_length) \
-                .add_character_set(self.passphrase_character_set) \
-                .add_value(self.passphrase_value)
+            passphrase_builder = PassphraseBuilder()
+            if self.passphrase_file_name is not None:
+                passphrase_builder.add_file(self.passphrase_file_name)
+            if self.passphrase_random is not None:
+                passphrase_builder.add_random(self.passphrase_random)
+            if self.passphrase_length is not None:
+                passphrase_builder.add_length(self.passphrase_length)
+            if self.passphrase_character_set is not None:
+                passphrase_builder.add_character_set(self.passphrase_character_set)
+            if self.passphrase_value is not None:
+                passphrase_builder.add_value(self.passphrase_value)
             with self.ignore_readonly('passphrase'):
                 if self.passphrase_random:
                     self.passphrase = passphrase_builder.init_with_random()
@@ -382,23 +452,39 @@ class TestingSet(FlexiClass, properties={
 
         if self.stop_after.value >= StopAfter.PRIVATE_KEY.value:
             # Generating the private key
-            private_key_builder = PrivateKeyBuilder() \
-                .add_nickname(self.nickname) \
-                .add_file(self.private_key_file_name) \
-                .add_passphrase(self.passphrase)
+            private_key_builder = PrivateKeyBuilder()
+            if self.nickname is not None:
+                private_key_builder.add_nickname(self.nickname)
+            if self.private_key_file_name is not None:
+                private_key_builder.add_file(self.private_key_file_name)
+            if self.private_key_size is not None:
+                private_key_builder.add_size(self.private_key_size)
+            if self.private_key_public_exponent is not None:
+                private_key_builder.add_public_exponent(self.private_key_public_exponent)
+            if self.private_key_encrypted is not None:
+                private_key_builder.add_encrypted(self.private_key_encrypted)
+            if self.private_key_encryption_algorithm is not None:
+                private_key_builder.add_encryption_algorithm(self.private_key_encryption_algorithm)
             with self.ignore_readonly('private_key'):
                 self.private_key = private_key_builder.init_new()
 
         if self.stop_after.value >= StopAfter.CERTIFICATE_SIGNING_REQUEST.value:
             # Generating the certificate signing request
-            certificate_signing_request_builder = CertificateSigningRequestBuilder() \
-                .add_nickname(self.nickname) \
-                .add_file(self.certificate_signing_request_file_name) \
-                .add_certificate_type(self.certificate_type) \
-                .add_private_key(self.private_key) \
-                .add_subject(self.certificate_subject) \
-                .add_alternative_names(self.certificate_alternative_names) \
-                .add_extra_extensions(self.certificate_extra_extensions)
+            certificate_signing_request_builder = CertificateSigningRequestBuilder()
+            if self.nickname is not None:
+                certificate_signing_request_builder.add_nickname(self.nickname)
+            if self.certificate_signing_request_file_name is not None:
+                certificate_signing_request_builder.add_file(self.certificate_signing_request_file_name)
+            if self.certificate_type is not None:
+                certificate_signing_request_builder.add_certificate_type(self.certificate_type)
+            if self.private_key is not None:
+                certificate_signing_request_builder.add_private_key(self.private_key)
+            if self.certificate_subject is not None:
+                certificate_signing_request_builder.add_subject(self.certificate_subject)
+            if self.certificate_alternative_names is not None:
+                certificate_signing_request_builder.add_alternative_names(self.certificate_alternative_names)
+            if self.certificate_extra_extensions is not None:
+                certificate_signing_request_builder.add_extra_extensions(self.certificate_extra_extensions)
             with self.ignore_readonly('certificate_signing_request'):
                 self.certificate_signing_request = certificate_signing_request_builder.init_new()
 
