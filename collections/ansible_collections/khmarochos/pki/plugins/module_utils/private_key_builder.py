@@ -11,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import inspect
+import logging
 import os
 
 from cryptography.hazmat.primitives import serialization
@@ -38,29 +39,91 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
     'size': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_SIZE},
     'public_exponent': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT},
     'encrypted': {'type': bool, 'default': Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED},
-    'encryption_algorithm': {
-        'type': serialization.KeySerializationEncryption,
-        'default': serialization.NoEncryption()
-    },
+    'encryption_algorithm': {'type': serialization.KeySerializationEncryption},
     'passphrase': {'type': Passphrase}
 }):
+
+    @FlexiBuilder.parameters_assigner
+    def _assign_parameters(
+            self,
+            parameters_to_assign: dict = None,
+            parameters_to_merge: dict = None,
+            parameters_assigned: dict = None
+    ) -> dict:
+
+        if parameters_assigned.get('encrypted') is True:
+            if parameters_assigned.get('passphrase') is None:
+                raise ValueError('The passphrase parameter cannot be None if the encrypted parameter is True')
+            elif isinstance(parameters_assigned.get('encryption_algorithm'), serialization.NoEncryption):
+                raise ValueError('The encryption_algorithm parameter cannot be serialization.NoEncryption '
+                                 'if the encrypted parameter is True')
+            elif parameters_assigned.get('encryption_algorithm') is None:
+                parameters_assigned['encryption_algorithm'] = serialization.BestAvailableEncryption(
+                    parameters_assigned.get('passphrase').lookup().encode()
+                )
+        else:
+            if parameters_assigned.get('passphrase') is not None:
+                raise ValueError('The passphrase parameter cannot be set if the encrypted parameter is False')
+            elif parameters_assigned.get('encryption_algorithm') is None:
+                parameters_assigned['encryption_algorithm'] = serialization.NoEncryption()
+            elif not isinstance(parameters_assigned.get('encryption_algorithm'), serialization.NoEncryption):
+                raise ValueError('The encryption_algorithm parameter must be serialization.NoEncryption '
+                                 'if the encrypted parameter is False')
+
+        return parameters_assigned
+
+    @staticmethod
+    def _check_after_load(
+            private_key: PrivateKey,
+            parameters_assigned: dict,
+            raise_exception: bool = True
+    ) -> bool:
+        result = FlexiBuilder.check_after_load_universal(
+            object_to_check=private_key,
+            parameters_assigned=parameters_assigned,
+            parameters_to_check=['size', 'public_exponent', 'encrypted', 'passphrase'],
+            raise_exception=raise_exception
+        )
+        if not isinstance(private_key.encryption_algorithm, type(parameters_assigned.get('encryption_algorithm'))):
+            if raise_exception:
+                raise RuntimeError(f"The private key has been loaded, "
+                                   f"its encryption algorithm ({private_key.encryption_algorithm}) differs from "
+                                   f"the expected encryption algorithm "
+                                   f"({parameters_assigned.get('encryption_algorithm')})")
+            else:
+                result = False
+        return result
+
+    def __init__(self, **kwargs):
+
+        super().__init__(**kwargs)
+
+        parameters_assigned = self._assign_parameters({
+            'encrypted': {},
+            'encryption_algorithm': {},
+            'passphrase': {}
+        })
+        with self.ignore_readonly('encryption_algorithm'):
+            self.encryption_algorithm = parameters_assigned.get('encryption_algorithm')
 
     def init_with_file(
             self,
             nickname: str = None,
             file: str = None,
             encrypted: bool = None,
+            encryption_algorithm: serialization.KeySerializationEncryption = None,
             passphrase: Passphrase = None
     ) -> PrivateKey:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if encrypted := self._from_kwargs_or_properties('encrypted'):
-            if (passphrase := self._from_kwargs_or_properties('passphrase')) is None:
-                raise ValueError('The passphrase parameter cannot be None')
-        private_key = PrivateKey(nickname=nickname, file=file, encrypted=encrypted, passphrase=passphrase)
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'file': {'mandatory': True},
+            'encrypted': {},
+            'encryption_algorithm': {},
+            'passphrase': {}
+        })
+        private_key = PrivateKey(**parameters_assigned)
         private_key.load()
+        PrivateKeyBuilder._check_after_load(private_key, parameters_assigned)
         return private_key
 
     def init_with_llo(
@@ -69,27 +132,24 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
             llo: rsa.RSAPrivateKey = None,
             file: str = None,
             encrypted: bool = None,
+            encryption_algorithm: serialization.KeySerializationEncryption = None,
             passphrase: Passphrase = None,
-            save: bool = True
+            save_if_needed: bool = True,
+            save_forced: bool = True
     ) -> PrivateKey:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (llo := self._from_kwargs_or_properties('llo')) is None:
-            raise ValueError('The llo parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if encrypted := self._from_kwargs_or_properties('encrypted'):
-            if (passphrase := self._from_kwargs_or_properties('passphrase')) is None:
-                raise ValueError('The passphrase parameter cannot be None')
-        private_key = PrivateKey(
-            nickname=nickname,
-            file=file,
-            llo=llo,
-            encrypted=encrypted,
-            passphrase=passphrase
-        )
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'llo': {'mandatory': True},
+            'file': {'mandatory': True},
+            'encrypted': {},
+            'encryption_algorithm': {},
+            'passphrase': {}
+        })
+        private_key = PrivateKey(**parameters_assigned)
         private_key.anatomize_llo()
-        if save:
+        PrivateKeyBuilder._check_after_load(private_key, parameters_assigned)
+        file_exists = os.path.exists(parameters_assigned.get('file'))
+        if save_forced or save_if_needed and not file_exists:
             private_key.save()
         return private_key
 
@@ -103,61 +163,36 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
             encryption_algorithm: serialization.KeySerializationEncryption = None,
             passphrase: Passphrase = None,
             load_if_exists: bool = False,
-            save: bool = True
+            save_if_needed: bool = True,
+            save_forced: bool = False
     ) -> PrivateKey:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (size := self._from_kwargs_or_properties('size')) < 1:
-            raise ValueError('The size parameter cannot be less than 1')
-        if (public_exponent := self._from_kwargs_or_properties('public_exponent')) < 1:
-            raise ValueError('The public_exponent parameter cannot be less than 1')
-        encrypted = self._from_kwargs_or_properties('encrypted')
-        encryption_algorithm = self._from_kwargs_or_properties('encryption_algorithm')
-        passphrase = self._from_kwargs_or_properties('passphrase')
-        if encrypted:
-            if encryption_algorithm is None:
-                raise ValueError('The encryption_algorithm parameter cannot be None')
-            if passphrase is None:
-                raise ValueError('The passphrase parameter cannot be None')
-        private_key = None
-        if load_if_exists and os.path.isfile(file):
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'file': {'mandatory': True},
+            'size': {},
+            'public_exponent': {},
+            'encrypted': {},
+            'encryption_algorithm': {},
+            'passphrase': {}
+        })
+        generated = False
+        if load_if_exists and os.path.isfile(parameters_assigned.get('file')):
             private_key = self.init_with_file(
-                nickname=nickname,
-                file=file,
-                encrypted=encrypted,
-                passphrase=passphrase
+                **{
+                    k: v for k, v in parameters_assigned.items() if k in [
+                        'nickname',
+                        'file',
+                        'encrypted',
+                        'encryption_algorithm',
+                        'passphrase'
+                    ]
+                }
             )
-            if private_key.size != size:
-                raise RuntimeError(f"The private key {file} already exists, "
-                                   f"its size ({private_key.size}) differs from the expected size ({size})")
-            if private_key.public_exponent != public_exponent:
-                raise RuntimeError(f"The private key {file} already exists, "
-                                   f"its public exponent ({private_key.public_exponent}) differs from "
-                                   f"the expected public exponent ({public_exponent})")
-            if private_key.encrypted != encrypted:
-                raise RuntimeError(f"The private key {file} already exists, "
-                                   f"its encrypted ({private_key.encrypted}) differs from "
-                                   f"the expected encrypted ({encrypted})")
-            if not isinstance(private_key.encryption_algorithm, type(encryption_algorithm)):
-                raise RuntimeError(f"The private key {file} already exists, "
-                                   f"its encryption algorithm ({private_key.encryption_algorithm}) differs from "
-                                   f"the expected encryption algorithm ({encryption_algorithm})")
-            if private_key.passphrase and private_key.passphrase != passphrase:
-                raise RuntimeError(f"The private key {file} already exists, "
-                                   f"its passphrase ({private_key.passphrase}) differs from "
-                                   f"the expected passphrase ({passphrase})")
-        if private_key is None:
-            private_key = PrivateKey(
-                nickname=nickname,
-                file=file,
-                size=size,
-                public_exponent=public_exponent,
-                encrypted=encrypted,
-                passphrase=passphrase
-            )
+            PrivateKeyBuilder._check_after_load(private_key, parameters_assigned)
+        else:
+            private_key = PrivateKey(**parameters_assigned)
             private_key.generate()
-            if save:
-                private_key.save()
+            generated = True
+        if save_forced or (save_if_needed and generated):
+            private_key.save()
         return private_key

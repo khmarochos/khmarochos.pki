@@ -42,6 +42,7 @@ from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test
 
 # noinspection SpellCheckingInspection,DuplicatedCode
 class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
+
     class TPParametersPassing(Enum):
         CONSTRUCTOR = 'passing parameters to the constructor'
         RUNTIME = 'adding parameters at runtime'
@@ -63,8 +64,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
 
     class TPInit(Enum):
         NEW = 'creating a new certificate'
-        LOAD_LLO = 'load a certificate from x509.Certificate'
-        LOAD_FILE = 'load a certificate from a file'
+        FROM_LLO = 'get a certificate from x509.Certificate'
+        FROM_FILE = 'get a certificate from a file'
 
     PARAMETER_SETS = []
     for tp_parameters_passing in list(TPParametersPassing):
@@ -446,8 +447,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         )
         logging.debug('Parameters provided to the testset: %s', provided_to_testset)
         logging.debug('Parameters provided to the builder: %s', provided_to_builder)
-        logging.debug('Parameters expected from the builder: %s', expected_in_builder)
-        logging.debug('Parameters expected from the outcome: %s', expected_in_outcome)
+        logging.debug('Parameters expected in the builder: %s', expected_in_builder)
+        logging.debug('Parameters expected in the outcome: %s', expected_in_outcome)
 
         certificate = None
 
@@ -516,14 +517,14 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                                                                )
                 else:
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
-            elif tp_init == TestCertificateBuilder.TPInit.LOAD_LLO:
+            elif tp_init == TestCertificateBuilder.TPInit.FROM_LLO:
                 certificate = CertificateBuilder().init_with_llo(
                     nickname=certificate.nickname,
                     private_key=certificate.private_key,
                     file=certificate.file,
                     llo=certificate.llo
                 )
-            elif tp_init == TestCertificateBuilder.TPInit.LOAD_FILE:
+            elif tp_init == TestCertificateBuilder.TPInit.FROM_FILE:
                 certificate = CertificateBuilder().init_with_file(
                     nickname=certificate.nickname,
                     private_key=certificate.private_key,
@@ -531,6 +532,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 )
             else:
                 raise ValueError(f'Unknown test parameter value ({tp_init})')
+
+            logging.debug('(%s), Certificate: %s, %s', tp_init, certificate, certificate.get_properties())
 
             self._test_certificate(
                 _certificate=certificate,
@@ -559,8 +562,6 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 alternative_names=[expected_in_outcome['alternative_names']],
                 extra_extensions=[expected_in_outcome['extra_extensions']],
             )
-
-            logging.debug('Certificate: %s', certificate)
 
         if self.openssl_available:
             openssl_completed = subprocess.run(

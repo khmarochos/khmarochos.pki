@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
 import os
 from cryptography import x509
 
@@ -38,17 +39,37 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
     'file': {},
     'certificate_type': {'type': CertificateTypes, 'default': CertificateTypes.CLIENT},
     'subject': {'type': x509.name.Name},
-    'subject_country': {},
-    'subject_state_or_province': {},
-    'subject_locality': {},
-    'subject_organization': {},
-    'subject_organizational_unit': {},
-    'subject_email_address': {},
-    'subject_common_name': {},
     'alternative_names': {'type': list},
     'extra_extensions': {'type': list},
     'private_key': {'type': PrivateKey}
 }):
+
+    @FlexiBuilder.parameters_assigner
+    def _assign_parameters(
+            self,
+            parameters_to_assign: dict = None,
+            parameters_to_merge: dict = None,
+            parameters_assigned: dict = None
+    ) -> dict:
+        if 'alternative_names' in parameters_assigned and parameters_assigned.get('alternative_names') is None:
+            parameters_assigned['alternative_names'] = []
+        if 'extra_extensions' in parameters_assigned and parameters_assigned.get('extra_extensions') is None:
+            parameters_assigned['extra_extensions'] = []
+        return parameters_assigned
+
+    @staticmethod
+    def _check_after_load(
+            certificate_signing_request: CertificateSigningRequest,
+            parameters_assigned: dict,
+            raise_exception: bool = True
+    ) -> bool:
+        result = FlexiBuilder.check_after_load_universal(
+            object_to_check=certificate_signing_request,
+            parameters_assigned=parameters_assigned,
+            parameters_to_check=['certificate_type', 'subject', 'private_key', 'alternative_names', 'extra_extensions'],
+            raise_exception=raise_exception
+        )
+        return result
 
     def init_with_file(
             self,
@@ -56,13 +77,12 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
             file: str = None,
             private_key: PrivateKey = None,
     ) -> CertificateSigningRequest:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (private_key := self._from_kwargs_or_properties('private_key')) is None:
-            raise ValueError('The private_key parameter cannot be None')
-        certificate_signing_request = CertificateSigningRequest(nickname=nickname, file=file, private_key=private_key)
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'file': {'mandatory': True},
+            'private_key': {'mandatory': True},
+        })
+        certificate_signing_request = CertificateSigningRequest(**parameters_assigned)
         certificate_signing_request.load()
         return certificate_signing_request
 
@@ -74,21 +94,15 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
             private_key: PrivateKey = None,
             save: bool = True
     ) -> CertificateSigningRequest:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (llo := self._from_kwargs_or_properties('llo')) is None:
-            raise ValueError('The llo parameter cannot be None')
-        if (private_key := self._from_kwargs_or_properties('private_key')) is None:
-            raise ValueError('The private_key parameter cannot be None')
-        certificate_signing_request = CertificateSigningRequest(
-            nickname=nickname,
-            file=file,
-            llo=llo,
-            private_key=private_key
-        )
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'file': {'mandatory': True},
+            'llo': {'mandatory': True},
+            'private_key': {'mandatory': True},
+        })
+        certificate_signing_request = CertificateSigningRequest(**parameters_assigned)
         certificate_signing_request.anatomize_llo()
+        CertificateSigningRequestBuilder._check_after_load(certificate_signing_request, parameters_assigned)
         if save:
             certificate_signing_request.save()
         return certificate_signing_request
@@ -103,69 +117,45 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
             alternative_names: list = None,
             extra_extensions: list = None,
             load_if_exists: bool = False,
-            save: bool = True
+            save_if_needed: bool = True,
+            save_forced: bool = False,
     ) -> CertificateSigningRequest:
-        if (nickname := self._from_kwargs_or_properties('nickname')) is None:
-            raise ValueError('The nickname parameter cannot be None')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (private_key := self._from_kwargs_or_properties('private_key')) is None:
-            raise ValueError('The private_key parameter cannot be None')
-        if (certificate_type := self._from_kwargs_or_properties('certificate_type')) is None:
-            raise ValueError('The certificate_type parameter cannot be None')
-        if (subject := self._from_kwargs_or_properties('subject')) is None:
-            raise ValueError('The subject parameter cannot be None')
-        if (alternative_names := self._from_kwargs_or_properties('alternative_names')) is None:
-            alternative_names = []
-        if (extra_extensions := self._from_kwargs_or_properties('extra_extensions')) is None:
-            extra_extensions = []
-        certificate_signing_request = None
-        if load_if_exists and os.path.isfile(file):
+        parameters_assigned = self._assign_parameters({
+            'nickname': {'mandatory': True},
+            'file': {'mandatory': True},
+            'private_key': {'mandatory': True},
+            'certificate_type': {'mandatory': True},
+            'subject': {'mandatory': True},
+            'alternative_names': {},
+            'extra_extensions': {},
+        })
+        generated = False
+        if load_if_exists and os.path.exists(parameters_assigned.get('file')):
             certificate_signing_request = self.init_with_file(
-                nickname=nickname,
-                file=file,
-                private_key=private_key
+                **{
+                    k: v for k, v in parameters_assigned.items() if k in [
+                        'nickname',
+                        'file',
+                        'private_key'
+                    ]
+                }
             )
-            if certificate_signing_request.certificate_type != certificate_type:
-                raise RuntimeError(f"The certificate signing request {file} already exists, "
-                                   f"its certificate type ({certificate_signing_request.certificate_type}) differs "
-                                   f"from the expected certificate type ({certificate_type})")
-            if certificate_signing_request.subject != subject:
-                raise RuntimeError(f"The certificate signing request {file} already exists, "
-                                   f"its subject ({certificate_signing_request.subject}) differs "
-                                   f"from the expected subject ({subject})")
-            if certificate_signing_request.llo.public_key().public_numbers().n != private_key.public_modulus:
-                raise RuntimeError(f"The certificate signing request {file} already exists, "
-                                   f"its public modulus ({certificate_signing_request.llo.public_key().public_numbers().n}) differs "
-                                   f"from the expected private key's public modulus ({private_key.public_modulus})")
-            if certificate_signing_request.alternative_names != alternative_names:
-                raise RuntimeError(f"The certificate signing request {file} already exists, "
-                                   f"its alternative names ({certificate_signing_request.alternative_names}) differ "
-                                   f"from the expected alternative names ({alternative_names})")
-            if certificate_signing_request.extra_extensions != extra_extensions:
-                raise RuntimeError(f"The certificate signing request {file} already exists, "
-                                   f"its extra extensions ({certificate_signing_request.extra_extensions}) differ "
-                                   f"from the expected extra extensions ({extra_extensions})")
-        if certificate_signing_request is None:
+            CertificateSigningRequestBuilder._check_after_load(certificate_signing_request, parameters_assigned)
+        else:
             certificate_signing_request = CertificateSigningRequest(
-                nickname=nickname,
-                file=file,
-                llo=self.build(
+                **parameters_assigned,
+                llo=self.build_llo(
                     builder=x509.CertificateSigningRequestBuilder(),
-                    issuer_private_key=private_key,
-                    issuer_subject=subject,
-                    private_key=private_key,
-                    certificate_type=certificate_type,
-                    subject=subject,
-                    alternative_names=alternative_names,
-                    extra_extensions=extra_extensions
+                    issuer_private_key=parameters_assigned.get('private_key'),
+                    issuer_subject=parameters_assigned.get('subject'),
+                    private_key=parameters_assigned.get('private_key'),
+                    certificate_type=parameters_assigned.get('certificate_type'),
+                    subject=parameters_assigned.get('subject'),
+                    alternative_names=parameters_assigned.get('alternative_names'),
+                    extra_extensions=parameters_assigned.get('extra_extensions')
                 ),
-                private_key=private_key,
-                certificate_type=certificate_type,
-                subject=subject,
-                alternative_names=alternative_names,
-                extra_extensions=extra_extensions
             )
-            if save:
-                certificate_signing_request.save()
+            generated = True
+        if save_forced or (save_if_needed and generated):
+            certificate_signing_request.save()
         return certificate_signing_request

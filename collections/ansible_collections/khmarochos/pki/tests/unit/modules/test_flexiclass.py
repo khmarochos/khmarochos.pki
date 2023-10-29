@@ -3,6 +3,9 @@ import unittest
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 
 
+FOURTY_TWO = 42
+THIRTEEN = 13
+
 class Persistence(unittest.TestCase):
     class Foo(FlexiClass, properties={
         FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
@@ -93,20 +96,20 @@ class PropertyBinding(unittest.TestCase):
             self._bind_properties([{'object': self.bravo.charlie, 'properties': {'value': 'charlie_value'}}])
 
     def test_property_binding(self):
-        alpha = PropertyBinding.Alpha(charlie_value=42)
-        self.assertEqual(alpha.charlie_value, 42)
-        self.assertEqual(alpha.bravo.charlie_value, 42)
-        self.assertEqual(alpha.bravo.charlie.value, 42)
-        alpha.bravo.charlie.value = 13
-        self.assertEqual(alpha.charlie_value, 13)
-        self.assertEqual(alpha.bravo.charlie_value, 13)
-        self.assertEqual(alpha.bravo.charlie.value)
+        alpha = PropertyBinding.Alpha(charlie_value=FOURTY_TWO)
+        self.assertEqual(FOURTY_TWO, alpha.charlie_value)
+        self.assertEqual(FOURTY_TWO, alpha.bravo.charlie_value)
+        self.assertEqual(FOURTY_TWO, alpha.bravo.charlie.value)
+        alpha.bravo.charlie.value = THIRTEEN
+        self.assertEqual(THIRTEEN, alpha.charlie_value)
+        self.assertEqual(THIRTEEN, alpha.bravo.charlie_value)
+        self.assertEqual(THIRTEEN, alpha.bravo.charlie.value)
 
     def test_property_binding_with_new_object(self):
-        alpha_foo = PropertyBinding.Alpha(charlie_value=13)
-        self.assertEqual(13, alpha_foo.charlie_value)
-        alpha_foo = PropertyBinding.Alpha(charlie_value=42)
-        self.assertEqual(42, alpha_foo.charlie_value)
+        alpha_foo = PropertyBinding.Alpha(charlie_value=THIRTEEN)
+        self.assertEqual(THIRTEEN, alpha_foo.charlie_value)
+        alpha_foo = PropertyBinding.Alpha(charlie_value=FOURTY_TWO)
+        self.assertEqual(FOURTY_TWO, alpha_foo.charlie_value)
 
 if __name__ == '__main__':
-    unittest.main(42)
+    unittest.main()

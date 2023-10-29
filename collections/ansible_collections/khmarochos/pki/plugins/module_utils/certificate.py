@@ -14,6 +14,7 @@
 
 
 import datetime
+import logging
 from typing import Union
 
 from cryptography import x509
@@ -49,15 +50,19 @@ class Certificate(FlexiClass, properties={
     'private_key': {'type': PrivateKey},
 }):
 
-    def load(self, anatomize_llo: bool = False):
+    def load(self, anatomize_llo: bool = True):
         with open(self.file, 'rb') as f, self.ignore_readonly('llo'):
             self.llo = x509.load_pem_x509_certificate(f.read())
         if anatomize_llo:
             self.anatomize_llo()
 
     def anatomize_llo(self):
+        logging.debug(f'Anatomizing certificate {self}')
         with self.ignore_readonly('term'):
+            logging.debug(f'not_valid_after: {self.llo.not_valid_after}')
+            logging.debug(f'not_valid_before: {self.llo.not_valid_before}')
             self.term = (self.llo.not_valid_after - self.llo.not_valid_before).days
+            logging.debug(f'term: {self.term}')
         with self.ignore_readonly('subject'):
             self.subject = self.llo.subject
         with self.ignore_readonly('certificate_type'):

@@ -39,5 +39,5 @@ class BuilderTest(unittest.TestCase):
 
     def test_something(self):
         builder = BuilderTest.FooBuilder()
-        builder.add_alpha('foo1-alpha').add_bravo('foo1-bravo').build()
+        builder.add_alpha('foo1-alpha').add_bravo('foo1-bravo').build_llo()
         logging.debug(builder.__dict__)

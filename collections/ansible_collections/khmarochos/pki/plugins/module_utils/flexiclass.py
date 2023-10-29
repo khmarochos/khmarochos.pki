@@ -312,33 +312,33 @@ class FlexiClass:
         string = string.replace(FlexiClass.INTERPOLATOR_RESERVED_CHARACTER, '$$')
         return string
 
-    def _bind_properties(self, target_objects: list):
-        for target_object in target_objects:
-            object = target_object['object']
-            for property_backend, property_frontend in target_object['properties'].items():
-                if property_frontend not in self._class_properties:
-                    raise UnknownProperty(f"The {property_frontend} property is unknown for {self.__class__.__name__}")
-                if property_backend not in object._class_properties:
-                    raise UnknownProperty(f"The {property_backend} property is unknown for {object.__class__.__name__}")
-                self._property_bindings[property_frontend] = {
-                    'object': object,
-                    'property': property_backend
-                }
+    # def _bind_properties(self, target_objects: list):
+    #     for target_object in target_objects:
+    #         object = target_object['object']
+    #         for property_backend, property_frontend in target_object['properties'].items():
+    #             if property_frontend not in self._class_properties:
+    #                 raise UnknownProperty(f"The {property_frontend} property is unknown for {self.__class__.__name__}")
+    #             if property_backend not in object._class_properties:
+    #                 raise UnknownProperty(f"The {property_backend} property is unknown for {object.__class__.__name__}")
+    #             self._property_bindings[property_frontend] = {
+    #                 'object': object,
+    #                 'property': property_backend
+    #             }
 
-    def _bind_arguments(self, property_bindings):
-        return {
-            property_backend: getattr(self, property_frontend)
-            for property_backend, property_frontend in property_bindings.items()
-        }
+    # def _bind_arguments(self, property_bindings):
+    #     return {
+    #         property_backend: getattr(self, property_frontend)
+    #         for property_backend, property_frontend in property_bindings.items()
+    #     }
 
-    def _from_kwargs_or_properties(self, property_name: str):
-        result = None
-        if (caller := inspect.currentframe().f_back) is not None:
-            (args, _, _, values) = inspect.getargvalues(caller)
-            result = values.get(property_name)
-        if result is None:
-            result = getattr(self, property_name)
-        return result
+    # def _from_kwargs_or_properties(self, property_name: str):
+    #     result = None
+    #     if (caller := inspect.currentframe().f_back) is not None:
+    #         (args, _, _, values) = inspect.getargvalues(caller)
+    #         result = values.get(property_name)
+    #     if result is None:
+    #         result = getattr(self, property_name)
+    #     return result
 
     #
     # PUBLIC METHODS

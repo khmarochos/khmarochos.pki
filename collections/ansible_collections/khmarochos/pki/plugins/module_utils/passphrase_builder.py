@@ -11,8 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import inspect
 import logging
+import os
 import secrets
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
@@ -36,65 +37,113 @@ class PassphraseBuilder(FlexiBuilder, properties={
     'character_set': {'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET}
 }):
 
+    @FlexiBuilder.parameters_assigner
+    def _assign_parameters(
+            self,
+            parameters_to_assign: dict = None,
+            parameters_to_merge: dict = None,
+            parameters_assigned: dict = None
+    ) -> dict:
+
+        if parameters_assigned.get('random') is True:
+            if parameters_assigned.get('length') < 1:
+                raise ValueError('The length parameter cannot be less than 1 if the random parameter is True')
+            elif len(parameters_assigned.get('character_set')) < 1:
+                raise ValueError('The character_set parameter cannot be empty if the random parameter is True')
+            elif parameters_assigned.get('value') is not None:
+                raise ValueError('The value parameter cannot be set if the random parameter is True')
+
+        return parameters_assigned
+
+    @staticmethod
+    def _check_after_load(
+            passphrase: Passphrase,
+            parameters_assigned: dict = None,
+            raise_exception: bool = True
+    ) -> bool:
+        result = FlexiBuilder._check_after_load_universal(
+            object_to_check=passphrase,
+            parameters_assigned=parameters_assigned,
+            parameters_to_check=['value', 'random', 'length', 'character_set'],
+            raise_exception=raise_exception
+        )
+        return result
+
     def init_with_file(
             self,
-            file: str = None
+            file: str = None,
     ) -> Passphrase:
-        if self.property_updated('value') and self.value is not None:
-            logging.warning('The value parameter is ignored when using init_with_random()')
-        if self.property_updated('random') and self.random is True:
-            logging.warning('The random parameter is ignored when using init_with_value()')
-        if self.property_updated('length') and self.length is not None:
-            logging.warning('The length parameter is ignored when using init_with_value()')
-        if self.property_updated('character_set') and self.character_set is not None:
-            logging.warning('The character_set parameter is ignored when using init_with_value()')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        passphrase = Passphrase(file=file)
+        parameters_assigned = self._assign_parameters({
+            'file': {'mandatory': True},
+        })
+        passphrase = Passphrase(**parameters_assigned)
         passphrase.load()
+        FlexiBuilder._check_after_load(passphrase, parameters_assigned)
         return passphrase
 
     def init_with_value(
             self,
+            load_if_exists: bool = False,
+            save_if_needed: bool = True,
+            save_forced: bool = False,
             file: str = None,
-            value: str = None,
-            save: bool = True
+            value: str = None
     ) -> Passphrase:
-        if self.property_updated('random') and self.random is True:
-            logging.warning('The random parameter is ignored when using init_with_value()')
-        if self.property_updated('length') and self.length is not None:
-            logging.warning('The length parameter is ignored when using init_with_value()')
-        if self.property_updated('character_set') and self.character_set is not None:
-            logging.warning('The character_set parameter is ignored when using init_with_value()')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (value := self._from_kwargs_or_properties('value')) is None:
-            raise ValueError('The value parameter cannot be None')
-        passphrase = Passphrase(value=value, file=file)
-        if save:
+        parameters_assigned = self._assign_parameters({
+            'file': {'mandatory': True},
+            'value': {'mandatory': True}
+        })
+        file_exists = os.path.exists(parameters_assigned.get('file'))
+        generated = False
+        if load_if_exists and file_exists:
+            passphrase = self.init_with_file(**{
+                k: v for k, v in parameters_assigned.items() if k in ['file']
+            })
+            PassphraseBuilder._check_after_load(passphrase, parameters_assigned)
+        else:
+            passphrase = Passphrase(**parameters_assigned)
+            generated = True
+        if save_forced or (save_if_needed and generated):
             passphrase.save()
         return passphrase
 
     def init_with_random(
             self,
+            load_if_exists: bool = False,
+            save_if_needed: bool = True,
+            save_forced: bool = False,
             file: str = None,
             random: bool = None,
             length: int = None,
-            character_set: str = None,
-            save: bool = True
+            character_set: str = None
     ) -> Passphrase:
-        if self.property_updated('value') and self.value is not None:
-            logging.warning('The value parameter is ignored when using init_with_random()')
-        if (file := self._from_kwargs_or_properties('file')) is None:
-            raise ValueError('The file parameter cannot be None')
-        if (random := self._from_kwargs_or_properties('random')) is False:
-            raise ValueError('The random parameter cannot be False')
-        if (length := self._from_kwargs_or_properties('length')) < 1:
-            raise ValueError('The length parameter cannot be less than 1')
-        if len(character_set := self._from_kwargs_or_properties('character_set')) < 1:
-            raise ValueError('The character_set parameter cannot be empty')
-        value = ''.join(secrets.choice(character_set) for _ in range(length))
-        passphrase = Passphrase(value=value, file=file)
-        if save:
+        parameters_assigned = self._assign_parameters({
+            'file': {'mandatory': True},
+            'random': {'mandatory': True},
+            'length': {},
+            'character_set': {}
+        })
+        file_exists = os.path.exists(parameters_assigned.get('file'))
+        generated = False
+        if load_if_exists and file_exists:
+            passphrase = self.init_with_file(**{
+                k: v for k, v in parameters_assigned.items() if k in ['file']
+            })
+            PassphraseBuilder._check_after_load(passphrase, parameters_assigned)
+        else:
+            parameters_assigned['value'] = ''.join(
+                secrets.choice(parameters_assigned.get('character_set'))
+                    for _ in range(parameters_assigned.get('length'))
+            )
+            passphrase = self.init_with_value(
+                load_if_exists=load_if_exists,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced,
+                **{
+                    k: v for k, v in parameters_assigned.items() if k in ['file', 'value']
+                }
+            )
+            generated = True
+        if save_forced or (save_if_needed and generated):
             passphrase.save()
         return passphrase

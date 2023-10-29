@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import logging
 from typing import Union
 
 from cryptography import x509
@@ -38,7 +39,7 @@ class CertificateBuilderBase:
         return x509.name.Name(components)
 
     @staticmethod
-    def build(
+    def build_llo(
             builder: Union[x509.CertificateBuilder, x509.CertificateSigningRequestBuilder],
             issuer_private_key: PrivateKey,
             issuer_subject: x509.name.Name,

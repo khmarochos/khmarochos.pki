@@ -14,9 +14,11 @@
 
 from __future__ import annotations
 
+import logging
 import os.path
 
 from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
@@ -25,8 +27,10 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import F
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
     CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase_builder import PassphraseBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key_builder import PrivateKeyBuilder
 
 
 # noinspection PyCompatibility
@@ -72,11 +76,12 @@ class PKICA(FlexiClass, properties={
     'certificate': {'type': Certificate},
     'certificate_llo': {'type': x509.Certificate},
     'certificate_term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
-    'certificate_subject_country': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_state_or_province': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_locality': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_organization': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_organizational_unit': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject': {'type': x509.name.Name},
+    'certificate_subject_country_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_state_or_province_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_locality_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_organization_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_organizational_unit_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_email_address': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_common_name': {'default': "${name}"},
     # directory names
@@ -135,53 +140,32 @@ class PKICA(FlexiClass, properties={
 
         super().__init__(**kwargs)
 
-        property_bindings = {
-            'file': 'certificate_file',
-            'chain_file': 'certificate_chain_file',
-            'llo': 'certificate_llo',
-            'term': 'certificate_term',
-            'subject_country': 'certificate_subject_country',
-            'subject_state_or_province': 'certificate_subject_state_or_province',
-            'subject_locality': 'certificate_subject_locality',
-            'subject_organization': 'certificate_subject_organization',
-            'subject_organizational_unit': 'certificate_subject_organizational_unit',
-            'subject_email_address': 'certificate_subject_email_address',
-            'subject_common_name': 'certificate_subject_common_name',
-            'key': 'key',
-            'key_llo': 'key_llo',
-            'key_file': 'key_file',
-            'key_size': 'key_size',
-            'key_public_exponent': 'key_public_exponent',
-            'key_encrypted': 'key_encrypted',
-            'key_passphrase': 'key_passphrase',
-            'key_passphrase_file': 'key_passphrase_file',
-            'key_passphrase_value': 'key_passphrase_value',
-            'key_passphrase_random': 'key_passphrase_random',
-            'key_passphrase_length': 'key_passphrase_length',
-            'key_passphrase_character_set': 'key_passphrase_character_set',
-            # 'keystore_file': 'keystore_file',
-            # 'keystore_passphrase': 'keystore_passphrase',
-            # 'keystore_passphrase_file': 'keystore_passphrase_file',
-            'certificate_signing_request_file': 'certificate_signing_request_file',
-        }
-
-        if self.certificate is None:
-            with self.ignore_readonly('certificate'):
-                self.certificate = Certificate(
-                    nickname=self.nickname,
-                    type=CertificateTypes.CA_STUBBY if self.stubby else CertificateTypes.CA_INTERMEDIATE,
-                    ca=self.pki_cascade.get_ca(self.parent_nickname) if self.parent_nickname is not None else None,
-                    **self._bind_arguments(property_bindings),
-                )
-
-        self._bind_properties([{
-            'object': self.certificate,
-            'properties': property_bindings,
-        }])
+        self.setup()
 
     def setup(self):
+
         self.setup_directories()
-        self.issue(self.certificate)
+
+        if self.key_passphrase is None and self.key_encrypted:
+            with self.ignore_readonly('key_passphrase'):
+                self.key_passphrase = PassphraseBuilder().init_with_random(
+                    file=self.ca_key_passphrase_file,
+                    load_if_exists=True,
+                    save_if_needed=True,
+                    save_forced=False
+                )
+
+        if self.key is None:
+            with self.ignore_readonly('key'):
+                self.key = PrivateKeyBuilder().init_new(
+                    nickname=self.nickname,
+                    file=self.ca_key_file,
+                    encrypted=self.key_encrypted,
+                    passphrase=self.key_passphrase,
+                    load_if_exists=True,
+                    save_if_needed=True,
+                    save_forced=False
+                )
 
     def setup_directories(self):
         for directory, mode in {
@@ -189,9 +173,15 @@ class PKICA(FlexiClass, properties={
                 Constants.DEFAULT_ROOT_DIRECTORY_MODE,
             self.private_directory:
                 Constants.DEFAULT_PRIVATE_DIRECTORY_MODE,
+            self.private_directory + '/' + self.ca_subdirectory:
+                Constants.DEFAULT_PRIVATE_DIRECTORY_MODE,
             self.certificate_signing_requests_directory:
                 Constants.DEFAULT_CERTIFICATE_SIGNING_REQUESTS_DIRECTORY_MODE,
+            self.certificate_signing_requests_directory + '/' + self.ca_subdirectory:
+                Constants.DEFAULT_CERTIFICATE_SIGNING_REQUESTS_DIRECTORY_MODE,
             self.certificates_directory:
+                Constants.DEFAULT_CERTIFICATES_DIRECTORY_MODE,
+            self.certificates_directory + '/' + self.ca_subdirectory:
                 Constants.DEFAULT_CERTIFICATES_DIRECTORY_MODE,
             self.certificate_revocation_lists_directory:
                 Constants.DEFAULT_CERTIFICATE_REVOCATION_LISTS_DIRECTORY_MODE

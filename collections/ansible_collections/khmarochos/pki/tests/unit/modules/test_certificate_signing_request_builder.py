@@ -52,8 +52,8 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
 
     class TPInit(Enum):
         NEW = 'creating a new certificate signing request'
-        LOAD_LLO = 'load a certificate signing request from x509.CertificateSigningRequest'
-        LOAD_FILE = 'load a certificate signing request from a file'
+        FROM_LLO = 'get a certificate signing request from x509.CertificateSigningRequest'
+        FROM_FILE = 'get a certificate signing request from a file'
 
     PARAMETER_SETS = []
     for tp_parameters_passing in list(TPParametersPassing):
@@ -72,7 +72,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
 
     @classmethod
     def setUpClass(cls) -> None:
-        logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)])
+        logging.basicConfig(level=logging.DEBUG, handlers=[logging.StreamHandler(sys.stdout)])
 
     def _test_builder(
             self,
@@ -197,8 +197,8 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
         )
         logging.debug('Parameters provided to the testset: %s', provided_to_testset)
         logging.debug('Parameters provided to the builder: %s', provided_to_builder)
-        logging.debug('Parameters expected from the builder: %s', expected_in_builder)
-        logging.debug('Parameters expected from the outcome: %s', expected_in_outcome)
+        logging.debug('Parameters expected in the builder: %s', expected_in_builder)
+        logging.debug('Parameters expected in the outcome: %s', expected_in_outcome)
 
         certificate_signing_request = None
 
@@ -246,14 +246,14 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
                     if tp_parameters_passing == TestCertificateSigningRequestBuilder.TPParametersPassing.FINAL_CALL
                     else {}
                 ))
-            elif tp_init == TestCertificateSigningRequestBuilder.TPInit.LOAD_LLO:
+            elif tp_init == TestCertificateSigningRequestBuilder.TPInit.FROM_LLO:
                 certificate_signing_request = CertificateSigningRequestBuilder().init_with_llo(
                     nickname=certificate_signing_request.nickname,
                     private_key=certificate_signing_request.private_key,
                     file=certificate_signing_request.file,
                     llo=certificate_signing_request.llo
                 )
-            elif tp_init == TestCertificateSigningRequestBuilder.TPInit.LOAD_FILE:
+            elif tp_init == TestCertificateSigningRequestBuilder.TPInit.FROM_FILE:
                 certificate_signing_request = CertificateSigningRequestBuilder().init_with_file(
                     nickname=certificate_signing_request.nickname,
                     private_key=certificate_signing_request.private_key,

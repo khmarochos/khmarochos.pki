@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import logging
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca import PKICA
@@ -38,6 +39,7 @@ class PKICascade(FlexiClass, properties={
     def __init__(self, pki_cascade_configuration: dict = None, **kwargs):
         super().__init__(pki_cascade_configuration=pki_cascade_configuration, **kwargs)
         # self.pki_cascade = {}
+        logging.debug(f"PKICascade.__init__(): pki_cascade_configuration = {pki_cascade_configuration}")
         self.traverse_cascade(
             branch=pki_cascade_configuration,
             nickname=None,
@@ -65,6 +67,9 @@ class PKICascade(FlexiClass, properties={
             parameters.update(branch[PKICascade.PARAMETERS_KEY])
         # If this branch contains parameters of some CA, add the CA to the cascade
         if nickname is not None:
+            logging.debug(f"PKICascade.traverse_cascade(): nickname = {nickname}")
+            logging.debug(f"PKICascade.traverse_cascade(): parent_nickname = {parent_nickname}")
+            logging.debug(f"PKICascade.traverse_cascade(): parameters = {parameters}")
             pki_ca = PKICA(pki_cascade=self, nickname=nickname, parent_nickname=parent_nickname, **parameters)
             self.add_ca(pki_ca)
         # If there are branches, traverse them

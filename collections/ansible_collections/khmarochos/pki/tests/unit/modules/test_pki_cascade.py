@@ -19,19 +19,16 @@ class InitCascadeTest(unittest.TestCase):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
         self.assertTrue(type(pki_cascade), PKICascade)
 
-
     def test_load(self):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
         for pki_ca in pki_cascade.pki_cascade.values():
             pki_ca.setup()
-
 
     def test_pki_cascade_json(self):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
         for pki_ca in pki_cascade.pki_cascade.values():
             pki_ca.setup()
         logging.debug(pki_cascade.pki_cascade_json(pretty=True))
-
 
     def test_pki_issue(self):
         pki_cascade = PKICascade(self.pki_cascade_configuration)

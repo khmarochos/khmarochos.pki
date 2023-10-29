@@ -296,7 +296,7 @@ class TestingSet(FlexiClass, properties={
             if self.passphrase_file is None:
                 with self.ignore_readonly('passphrase_file'):
                     self.passphrase_file = tempfile.NamedTemporaryFile(
-                        prefix='f{nickname}.',
+                        prefix=f'{self.nickname}.',
                         suffix='.passphrase.txt',
                     )
                 with self.ignore_readonly('passphrase_file_name'):
