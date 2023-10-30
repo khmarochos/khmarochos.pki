@@ -205,10 +205,15 @@ class TestPrivateKeyBuilder(unittest.TestCase, AbstractBuilderTest):
             expected_in_builder['passphrase'] = testset.passphrase
             expected_in_outcome['passphrase'] = testset.passphrase
         elif tp_encryption_algorithm == TestPrivateKeyBuilder.TPEncryptionAlgorithm.NO_ENCRYPTION:
-            expected_in_builder['passphrase'] = None
-            expected_in_outcome['passphrase'] = None
+            provided_to_builder['encrypted'] = False
+            expected_in_builder['encrypted'] = False
+            expected_in_outcome['encrypted'] = False
+            provided_to_builder['encryption_algorithm'] = serialization.NoEncryption()
             expected_in_builder['encryption_algorithm'] = serialization.NoEncryption()
             expected_in_outcome['encryption_algorithm'] = serialization.NoEncryption()
+            provided_to_testset['passphrase'] = None
+            expected_in_builder['passphrase'] = None
+            expected_in_outcome['passphrase'] = None
         else:
             raise ValueError(f'Unexpected tp_encryption_algorithm value: {tp_encryption_algorithm}')
 
@@ -260,7 +265,7 @@ class TestPrivateKeyBuilder(unittest.TestCase, AbstractBuilderTest):
                     size=Constants.DEFAULT_PRIVATE_KEY_SIZE,
                     public_exponent=Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT,
                     encrypted=Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED,
-                    encryption_algorithm=(TT.ISINSTANCE, serialization.NoEncryption),
+                    encryption_algorithm=(TT.NONE,),
                     passphrase=(TT.NONE,),
                 )
 

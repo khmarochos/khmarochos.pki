@@ -61,10 +61,10 @@ class PassphraseBuilder(FlexiBuilder, properties={
             parameters_assigned: dict = None,
             raise_exception: bool = True
     ) -> bool:
-        result = FlexiBuilder._check_after_load_universal(
+        result = FlexiBuilder.check_after_load_universal(
             object_to_check=passphrase,
             parameters_assigned=parameters_assigned,
-            parameters_to_check=['value', 'random', 'length', 'character_set'],
+            parameters_to_check=['value', 'length'],
             raise_exception=raise_exception
         )
         return result
@@ -78,7 +78,7 @@ class PassphraseBuilder(FlexiBuilder, properties={
         })
         passphrase = Passphrase(**parameters_assigned)
         passphrase.load()
-        FlexiBuilder._check_after_load(passphrase, parameters_assigned)
+        PassphraseBuilder._check_after_load(passphrase, parameters_assigned)
         return passphrase
 
     def init_with_value(

@@ -15,12 +15,13 @@
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_base import CertificateBase
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 
 
-class CertificateSigningRequest(FlexiClass, properties={
+class CertificateSigningRequest(CertificateBase, FlexiClass, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'mandatory': False,
         'default': None,
@@ -44,48 +45,3 @@ class CertificateSigningRequest(FlexiClass, properties={
         if anatomize_llo:
             self.anatomize_llo()
 
-    def anatomize_llo(self):
-        with self.ignore_readonly('subject'):
-            self.subject = self.llo.subject
-        with self.ignore_readonly('certificate_type'):
-            self.certificate_type = CertificateTypes.CLIENT
-        with self.ignore_readonly('alternative_names'):
-            self.alternative_names = []
-        with self.ignore_readonly('extra_extensions'):
-            self.extra_extensions = []
-        for extension in self.llo.extensions:
-            if extension.oid == x509.oid.ExtensionOID.BASIC_CONSTRAINTS:
-                with self.ignore_readonly('certificate_type'):
-                    if extension.value.ca:
-                        if extension.value.path_length == 0:
-                            self.certificate_type = CertificateTypes.CA_STUBBY
-                        else:
-                            self.certificate_type = CertificateTypes.CA_INTERMEDIATE
-            elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
-                with self.ignore_readonly('alternative_names'):
-                    for alternative_name in extension.value:
-                        if isinstance(alternative_name, x509.DNSName):
-                            self.alternative_names.append(alternative_name.value)
-            elif extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
-                pass
-            elif extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
-                pass
-            elif extension.oid == x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER:
-                pass
-            elif extension.oid == x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER:
-                pass
-            else:
-                with self.ignore_readonly('extra_extensions'):
-                    self.extra_extensions.append(
-                        {
-                            'critical': extension.critical,
-                            'extension': extension.value
-                        }
-                    )
-
-    def save(self):
-        with open(self.file, 'wb') as f:
-            f.write(self.get_pem())
-
-    def get_pem(self):
-        return self.llo.public_bytes(serialization.Encoding.PEM)

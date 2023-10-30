@@ -36,10 +36,7 @@ class PrivateKey(FlexiClass, properties={
     'public_exponent': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT},
     'public_key': {'type': rsa.RSAPublicKey},
     'encrypted': {'type': bool, 'default': Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED},
-    'encryption_algorithm': {
-        'type': serialization.KeySerializationEncryption,
-        'default': serialization.NoEncryption()
-    },
+    'encryption_algorithm': {'type': serialization.KeySerializationEncryption},
     'passphrase': {'type': Passphrase},
 }):
 
