@@ -11,33 +11,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import subprocess
 import sys
 import unittest
 import logging
-import yaml
 from enum import Enum
+from itertools import chain
 
 from parameterized import parameterized
 from cryptography import x509
 
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
-    CertificateSigningRequest
-from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
-from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
-from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca import PKICA
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder import CertificateBuilder
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request_builder import \
-    CertificateSigningRequestBuilder
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes, Constants
-from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
-from ansible_collections.khmarochos.pki.plugins.module_utils.private_key_builder import PrivateKeyBuilder
-from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase_builder import PassphraseBuilder
-from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import BuilderTestType as TT, \
-    TestingSet, Randomizer, StopAfter
-from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import BuilderCheckList
-from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set import AbstractBuilderTest
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate \
+    import Certificate
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request \
+    import CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key \
+    import PrivateKey
+from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca \
+    import PKICA
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder \
+    import CertificateBuilder
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants \
+    import CertificateTypes, Constants
+from ansible_collections.khmarochos.pki.tests.unit.modules.abstract_builder_test_set \
+    import BuilderTestType as TT, TestingSet, Randomizer, StopAfter, BuilderCheckList, AbstractBuilderTest
 
 
 # noinspection SpellCheckingInspection,DuplicatedCode
@@ -64,6 +62,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
 
     class TPInit(Enum):
         NEW = 'creating a new certificate'
+        NEW_WHEN_EXISTS = 'creating a new certificate when it already exists'
         FROM_LLO = 'get a certificate from x509.Certificate'
         FROM_FILE = 'get a certificate from a file'
 
@@ -172,6 +171,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
 
         randomizer = Randomizer()
 
+        trusted_certificates = []
+
         if tp_issuer in (
                 TestCertificateBuilder.TPSigningKey.CA_ROOT,
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1,
@@ -192,6 +193,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             certificate_ca_root = CertificateBuilder(
                 nickname=testset_ca_root.nickname,
                 file=testset_ca_root.certificate_file_name,
+                chain_file=testset_ca_root.certificate_chain_file_name,
                 private_key=testset_ca_root.private_key,
                 certificate_type=testset_ca_root.certificate_type,
                 term=testset_ca_root.certificate_term,
@@ -207,7 +209,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     lambda x: x.issuer == testset_ca_root.certificate_subject,
                 ]),
                 file=testset_ca_root.certificate_file_name,
-                chain_file=(TT.NONE,),
+                chain_file=testset_ca_root.certificate_chain_file_name,
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 term=testset_ca_root.certificate_term,
                 ca=(TT.NONE,),
@@ -218,6 +220,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 alternative_names=[testset_ca_root.certificate_alternative_names],
                 extra_extensions=[testset_ca_root.certificate_extra_extensions],
             )
+            trusted_certificates.append(certificate_ca_root)
 
         if tp_issuer in (
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_1,
@@ -238,6 +241,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             certificate_ca_intermediate_1 = CertificateBuilder(
                 nickname=testset_ca_intermediate_1.nickname,
                 file=testset_ca_intermediate_1.certificate_file_name,
+                chain_file=testset_ca_intermediate_1.certificate_chain_file_name,
                 private_key=testset_ca_intermediate_1.private_key,
                 certificate_type=testset_ca_intermediate_1.certificate_type,
                 term=testset_ca_root.certificate_term,
@@ -255,7 +259,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     lambda x: x.issuer == testset_ca_root.certificate_subject,
                 ]),
                 file=testset_ca_intermediate_1.certificate_file_name,
-                chain_file=(TT.NONE,),
+                chain_file=testset_ca_intermediate_1.certificate_chain_file_name,
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 term=testset_ca_root.certificate_term,
                 ca=(TT.NONE,),
@@ -266,6 +270,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 alternative_names=[testset_ca_intermediate_1.certificate_alternative_names],
                 extra_extensions=[testset_ca_intermediate_1.certificate_extra_extensions],
             )
+            trusted_certificates.append(certificate_ca_intermediate_1)
 
         if tp_issuer in (
                 TestCertificateBuilder.TPSigningKey.CA_INTERMEDIATE_2,
@@ -285,6 +290,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             certificate_ca_intermediate_2 = CertificateBuilder(
                 nickname=testset_ca_intermediate_2.nickname,
                 file=testset_ca_intermediate_2.certificate_file_name,
+                chain_file=testset_ca_intermediate_2.certificate_chain_file_name,
                 private_key=testset_ca_intermediate_2.private_key,
                 certificate_type=testset_ca_intermediate_2.certificate_type,
                 term=testset_ca_root.certificate_term,
@@ -302,7 +308,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     lambda x: x.issuer == testset_ca_intermediate_1.certificate_subject,
                 ]),
                 file=testset_ca_intermediate_2.certificate_file_name,
-                chain_file=(TT.NONE,),
+                chain_file=testset_ca_intermediate_2.certificate_chain_file_name,
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 term=testset_ca_root.certificate_term,
                 ca=(TT.NONE,),
@@ -313,6 +319,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 alternative_names=[testset_ca_intermediate_2.certificate_alternative_names],
                 extra_extensions=[testset_ca_intermediate_2.certificate_extra_extensions],
             )
+            trusted_certificates.append(certificate_ca_intermediate_2)
 
         testset_parameters = {
             'provided': {
@@ -370,6 +377,9 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         provided_to_builder['file'] = testset.certificate_file_name
         expected_in_builder['file'] = testset.certificate_file_name
         expected_in_outcome['file'] = testset.certificate_file_name
+        provided_to_builder['chain_file'] = testset.certificate_chain_file_name
+        expected_in_builder['chain_file'] = testset.certificate_chain_file_name
+        expected_in_outcome['chain_file'] = testset.certificate_chain_file_name
         provided_to_builder['private_key'] = testset.private_key
         expected_in_builder['private_key'] = testset.private_key
         expected_in_outcome['private_key'] = testset.private_key
@@ -471,7 +481,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     nickname=expected_in_builder['nickname'],
                     llo=(TT.NONE,),
                     file=expected_in_builder['file'],
-                    chain_file=(TT.NONE,),
+                    chain_file=expected_in_builder['chain_file'],
                     term=expected_in_builder['term'],
                     ca=(TT.NONE,),
                     certificate_type=expected_in_builder['certificate_type'],
@@ -513,8 +523,49 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     certificate = certificate_builder.sign_csr(**(
                         provided_to_builder
                         if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
-                        else {})
-                                                               )
+                        else {}
+                    ))
+                else:
+                    raise ValueError(f'Unknown test parameter value ({tp_request})')
+            elif tp_init == TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS:
+                if tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
+                    with self.assertRaises(RuntimeError):
+                        certificate_builder.sign_instantly(
+                            **{
+                                **(
+                                    provided_to_builder
+                                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                                        else {}
+                                ), **{
+                                    'term': int(certificate.term / 2),
+                                    'load_if_exists': True
+                                }
+                            }
+                        )
+                    certificate = certificate_builder.sign_instantly(**(
+                        provided_to_builder
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {}
+                    ), load_if_exists=True)
+                elif tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
+                    with self.assertRaises(RuntimeError):
+                        certificate_builder.sign_csr(
+                            **{
+                                **(
+                                    provided_to_builder
+                                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                                        else {}
+                                ), **{
+                                    'term': int(certificate.term / 2),
+                                    'load_if_exists': True
+                                }
+                            }
+                       )
+                    certificate = certificate_builder.sign_csr(**(
+                        provided_to_builder
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {}
+                    ), load_if_exists=True)
                 else:
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
             elif tp_init == TestCertificateBuilder.TPInit.FROM_LLO:
@@ -545,17 +596,25 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     lambda x: x.issuer == expected_in_outcome['issuer_subject'],
                 ]),
                 file=expected_in_outcome['file'],
-                chain_file=(TT.NONE,),
+                chain_file=(
+                    expected_in_outcome['chain_file']
+                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        else (TT.NONE,)
+                ),
                 certificate_type=expected_in_outcome['certificate_type'],
                 term=expected_in_outcome['term'],
                 ca=(TT.NONE,),
+                # The following two parameters are not always expected to be set because they are being set only when
+                # the certificate is being issued (not loaded)
                 issuer_private_key=(
-                    expected_in_outcome['issuer_private_key'] if tp_init == TestCertificateBuilder.TPInit.NEW
-                    else (TT.NONE,)
+                    expected_in_outcome['issuer_private_key']
+                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        else (TT.NONE,)
                 ),
                 issuer_subject=(
-                    expected_in_outcome['issuer_subject'] if tp_init == TestCertificateBuilder.TPInit.NEW
-                    else (TT.NONE,)
+                    expected_in_outcome['issuer_subject']
+                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        else (TT.NONE,)
                 ),
                 private_key=expected_in_outcome['private_key'],
                 subject=expected_in_outcome['subject'],
@@ -570,3 +629,36 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 capture_output=True,
             )
             logging.debug('Certificate information:\n%s', openssl_completed.stdout.decode('utf-8'))
+            i = 0
+            openssl_verify_completed = subprocess.run(
+                [
+                    'openssl',
+                    'verify',
+                    '-verbose',
+                    '-x509_strict',
+                    # The following sentense isn't too tricky. We need to pass the list of trusted certificates to
+                    # the openssl command. The list of trusted certificates is a list of files. The first file is always
+                    # prepended with the `-CAfile` option. The rest of the files are prepended with the `-untrusted`.
+                    # If the certificate is self-signed, then the list of trusted certificates contains this very
+                    # certificate itself. If the certificate is not self-signed, then the list of trusted certificates
+                    # contains all the issuer's certificates. The sensense looks complicated, but it actually is not...
+                    *list(
+                        chain.from_iterable(
+                            ['-untrusted' if (i := i + 1) > 1 else '-CAfile', trusted_certificate.file]
+                                for trusted_certificate in (
+                                    trusted_certificates
+                                        if len(trusted_certificates) > 0
+                                        else [certificate]
+                                )
+                        )
+                    ),
+                    certificate.file
+                ],
+                check=False,
+                capture_output=True,
+            )
+            logging.debug(
+                'Certificate verification result:\n%s\n%s',
+                openssl_verify_completed.stdout.decode('utf-8'),
+                openssl_verify_completed.stderr.decode('utf-8')
+            )

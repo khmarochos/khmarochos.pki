@@ -66,6 +66,14 @@ class CertificateSigningRequest(FlexiClass, properties={
                     for alternative_name in extension.value:
                         if isinstance(alternative_name, x509.DNSName):
                             self.alternative_names.append(alternative_name.value)
+            elif extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER:
+                pass
             else:
                 with self.ignore_readonly('extra_extensions'):
                     self.extra_extensions.append(

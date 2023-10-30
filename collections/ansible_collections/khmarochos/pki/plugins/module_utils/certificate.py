@@ -57,12 +57,8 @@ class Certificate(FlexiClass, properties={
             self.anatomize_llo()
 
     def anatomize_llo(self):
-        logging.debug(f'Anatomizing certificate {self}')
         with self.ignore_readonly('term'):
-            logging.debug(f'not_valid_after: {self.llo.not_valid_after}')
-            logging.debug(f'not_valid_before: {self.llo.not_valid_before}')
             self.term = (self.llo.not_valid_after - self.llo.not_valid_before).days
-            logging.debug(f'term: {self.term}')
         with self.ignore_readonly('subject'):
             self.subject = self.llo.subject
         with self.ignore_readonly('certificate_type'):
@@ -82,8 +78,16 @@ class Certificate(FlexiClass, properties={
             elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
                 with self.ignore_readonly('alternative_names'):
                     self.alternative_names = extension.value.get_values_for_type(x509.DNSName)
+            elif extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER:
+                pass
+            elif extension.oid == x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER:
+                pass
             else:
-                with self.ignore_readonly('extensions'):
+                with self.ignore_readonly('extra_extensions'):
                     self.extra_extensions.append(
                         {
                             'purpose': None,

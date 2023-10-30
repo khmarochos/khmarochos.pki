@@ -56,16 +56,52 @@ class CertificateBuilderBase:
         builder = builder.subject_name(subject)
         alternative_names = alternative_names if alternative_names is not None else []
         extra_extensions = extra_extensions if extra_extensions is not None else []
+        key_usage_dictionary = {
+            'digital_signature': False,
+            'content_commitment': False,
+            'key_encipherment': False,
+            'data_encipherment': False,
+            'key_agreement': False,
+            'key_cert_sign': False,
+            'crl_sign': False,
+            'encipher_only': False,
+            'decipher_only': False
+        }
         if certificate_type == CertificateTypes.CA_STUBBY:
+            key_usage_dictionary['digital_signature'] = True
+            key_usage_dictionary['key_cert_sign'] = True
+            key_usage_dictionary['crl_sign'] = True
             builder = builder.add_extension(
                 x509.BasicConstraints(ca=True, path_length=0),
                 True
             )
+            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
         elif certificate_type == CertificateTypes.CA_INTERMEDIATE:
+            key_usage_dictionary['digital_signature'] = True
+            key_usage_dictionary['key_cert_sign'] = True
+            key_usage_dictionary['crl_sign'] = True
             builder = builder.add_extension(
                 x509.BasicConstraints(ca=True, path_length=None),
                 True
             )
+            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
+        else:
+            key_usage_dictionary['digital_signature'] = True
+            key_usage_dictionary['key_encipherment'] = True
+            key_usage_dictionary['data_encipherment'] = True
+            builder = builder.add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                True
+            )
+            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
+        builder = builder.add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_private_key.llo.public_key()),
+            False
+        )
+        builder = builder.add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(private_key.llo.public_key()),
+            False
+        )
         if len(alternative_names) > 0:
             builder = builder.add_extension(
                 x509.SubjectAlternativeName([x509.DNSName(alternative_name) for alternative_name in alternative_names]),

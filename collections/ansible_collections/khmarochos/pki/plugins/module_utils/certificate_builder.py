@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
 import warnings
 from typing import Union
 
@@ -112,7 +113,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
         result = FlexiBuilder.check_after_load_universal(
             object_to_check=certificate,
             parameters_assigned=parameters_assigned,
-            parameters_to_check=['chain_file', 'certificate_type', 'term', 'ca', 'private_key', 'subject',
+            parameters_to_check=['certificate_type', 'term', 'ca', 'private_key', 'subject',
                                  'alternative_names', 'extra_extensions'],
             raise_exception=raise_exception
         )
@@ -140,8 +141,9 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             file: str = None,
             llo: x509.Certificate = None,
             private_key: PrivateKey = None,
-            save: bool = True,
-            save_chain: bool = True
+            save_if_needed: bool = True,
+            save_forced: bool = False,
+            save_chain: bool = True,
     ):
         parameters_assigned = self._assign_parameters({
             'nickname': {'mandatory': True},
@@ -152,7 +154,8 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
         certificate = Certificate(**parameters_assigned)
         certificate.anatomize_llo()
         CertificateBuilder._check_after_load(certificate, parameters_assigned)
-        if save:
+        generated = False
+        if save_forced or (save_if_needed and generated):
             certificate.save()
         if save_chain:
             certificate.save_chain()
@@ -172,8 +175,10 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             subject: x509.name.Name = None,
             alternative_names: list = None,
             extra_extensions: list = None,
-            save: bool = True,
-            save_chain: bool = True
+            load_if_exists: bool = False,
+            save_if_needed: bool = True,
+            save_forced: bool = False,
+            save_chain: bool = True,
     ) -> Certificate:
         parameters_assigned = self._assign_parameters({
             'nickname': {'mandatory': True},
@@ -189,22 +194,34 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             'alternative_names': {},
             'extra_extensions': {},
         })
-        certificate = Certificate(
-            **parameters_assigned,
-            llo=self.build_llo(
-                builder=x509.CertificateBuilder(),
-                issuer_private_key=parameters_assigned.get('issuer_private_key'),
-                issuer_subject=parameters_assigned.get('issuer_subject'),
-                private_key=parameters_assigned.get('private_key'),
-                certificate_type=parameters_assigned.get('certificate_type'),
-                term=parameters_assigned.get('term'),
-                subject=parameters_assigned.get('subject'),
-                alternative_names=parameters_assigned.get('alternative_names'),
-                extra_extensions=parameters_assigned.get('extra_extensions')
-        ))
-        certificate.anatomize_llo()
-        certificate.save()
-        certificate.save_chain()
+        generated = False
+        if load_if_exists and os.path.exists(parameters_assigned.get('file')):
+            certificate = self.init_with_file(**{
+                k: v for k, v in parameters_assigned.items() if k in ['nickname', 'file', 'private_key']
+            })
+            CertificateBuilder._check_after_load(certificate, parameters_assigned)
+        else:
+            certificate = Certificate(
+                **parameters_assigned,
+                llo=self.build_llo(
+                    builder=x509.CertificateBuilder(),
+                    issuer_private_key=parameters_assigned.get('issuer_private_key'),
+                    issuer_subject=parameters_assigned.get('issuer_subject'),
+                    private_key=parameters_assigned.get('private_key'),
+                    certificate_type=parameters_assigned.get('certificate_type'),
+                    term=parameters_assigned.get('term'),
+                    subject=parameters_assigned.get('subject'),
+                    alternative_names=parameters_assigned.get('alternative_names'),
+                    extra_extensions=parameters_assigned.get('extra_extensions')
+                )
+            )
+            generated = True
+            certificate.anatomize_llo()     # Actually we don't need to do this because the certificate parameters are
+                                            # provided to the certificate object itself
+        if save_forced or (save_if_needed and generated):
+            certificate.save()
+            if save_chain:
+                certificate.save_chain()
         return certificate
 
     def sign_csr(
@@ -222,6 +239,10 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             alternative_names: list = None,
             extra_extensions: list = None,
             certificate_signing_request: CertificateSigningRequest = None,
+            load_if_exists: bool = False,
+            save_if_needed: bool = True,
+            save_forced: bool = False,
+            save_chain: bool = True,
     ) -> Certificate:
         parameters_assigned = self._assign_parameters({
             'nickname': {'mandatory': True},
@@ -238,81 +259,45 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             'extra_extensions': {},
             'certificate_signing_request': {'mandatory': True},
         })
-        logging.debug(f"ASSIGNED: {parameters_assigned}")
-        # # Perform some sanity checks
-        # if private_key not in (None, certificate_signing_request.private_key):
-        #     warnings.warn(f'The private_key parameter is given as {private_key} '
-        #                   f'but the certificate signing request supposes a different private key which is '
-        #                   f'{certificate_signing_request.private_key}', RuntimeWarning)
-        # if certificate_type not in (None, certificate_signing_request.certificate_type):
-        #     warnings.warn(f'The certificate_type parameter is given as {certificate_type} '
-        #                   'but the certificate signing request supposes a different type which is '
-        #                   f'{certificate_signing_request.certificate_type}', RuntimeWarning)
-        # if subject not in (None, certificate_signing_request.subject):
-        #     warnings.warn(f'The subject parameter is given as {subject} '
-        #                   'but the certificate signing request supposes a different subject which is '
-        #                   f'{certificate_signing_request.subject}', RuntimeWarning)
-        # if alternative_names not in (None, certificate_signing_request.alternative_names):
-        #     warnings.warn(f'The alternative_names parameter is given as {alternative_names} '
-        #                   'but the certificate signing request supposes a different alternative names which are '
-        #                   f'{certificate_signing_request.alternative_names}', RuntimeWarning)
-        # if extra_extensions not in (None, certificate_signing_request.extra_extensions):
-        #     warnings.warn(f'The extra_extensions parameter is given as {extra_extensions} '
-        #                   'but the certificate signing request supposes a different extra extensions which are '
-        #                   f'{certificate_signing_request.extra_extensions}', RuntimeWarning)
-        # certificate_llo = self.build(
-        #     builder=x509.CertificateBuilder(),
-        #     issuer_private_key=issuer_private_key,
-        #     issuer_subject=issuer_subject,
-        #     private_key=private_key,
-        #     certificate_type=certificate_type,
-        #     term=term,
-        #     subject=subject,
-        #     alternative_names=alternative_names,
-        #     extra_extensions=extra_extensions
-        # )
-        # certificate = Certificate(
-        #     nickname=nickname,
-        #     file=file,
-        #     chain_file=chain_file,
-        #     llo=certificate_llo,
-        #     ca=ca,
-        #     issuer_private_key=issuer_private_key,
-        #     issuer_subject=issuer_subject,
-        #     private_key=private_key,
-        # )
-        # certificate.anatomize_llo()
-        # certificate.save()
-        # certificate.save_chain()
-        # return certificate
-        logging.debug(f"ASSIGNED: {parameters_assigned}")
-        certificate = Certificate(
-            **{
-                k: v for k, v in parameters_assigned.items() if k in [
-                    'nickname',
-                    'file',
-                    'chain_file',
-                    'ca',
-                    'issuer_private_key',
-                    'issuer_subject',
-                    'private_key',
-                    'subject',
-                    'alternative_names',
-                    'extra_extensions'
-                ]
-            },
-            llo=self.build_llo(
-                builder=x509.CertificateBuilder(),
-                issuer_private_key=parameters_assigned.get('issuer_private_key'),
-                issuer_subject=parameters_assigned.get('issuer_subject'),
-                private_key=parameters_assigned.get('private_key'),
-                certificate_type=parameters_assigned.get('certificate_type'),
-                term=parameters_assigned.get('term'),
-                subject=parameters_assigned.get('subject'),
-                alternative_names=parameters_assigned.get('alternative_names'),
-                extra_extensions=parameters_assigned.get('extra_extensions')
-        ))
-        certificate.anatomize_llo()
-        certificate.save()
-        certificate.save_chain()
+        generated = False
+        if load_if_exists and os.path.exists(parameters_assigned.get('file')):
+            certificate = self.init_with_file(**{
+                k: v for k, v in parameters_assigned.items() if k in ['nickname', 'file', 'private_key']
+            })
+            CertificateBuilder._check_after_load(certificate, parameters_assigned)
+        else:
+            certificate = Certificate(
+                **{
+                    k: v for k, v in parameters_assigned.items() if k in [
+                        'nickname',
+                        'file',
+                        'chain_file',
+                        'ca',
+                        'issuer_private_key',
+                        'issuer_subject',
+                        'private_key',
+                        'subject',
+                        'alternative_names',
+                        'extra_extensions'
+                    ]
+                },
+                llo=self.build_llo(
+                    builder=x509.CertificateBuilder(),
+                    issuer_private_key=parameters_assigned.get('issuer_private_key'),
+                    issuer_subject=parameters_assigned.get('issuer_subject'),
+                    private_key=parameters_assigned.get('private_key'),
+                    certificate_type=parameters_assigned.get('certificate_type'),
+                    term=parameters_assigned.get('term'),
+                    subject=parameters_assigned.get('subject'),
+                    alternative_names=parameters_assigned.get('alternative_names'),
+                    extra_extensions=parameters_assigned.get('extra_extensions')
+                )
+            )
+            certificate.anatomize_llo()     # We need to do this because the certificate parameters are provided by
+                                            # the certificate signing request
+            generated = True
+        if save_forced or (save_if_needed and generated):
+            certificate.save()
+            if save_chain:
+                certificate.save_chain()
         return certificate
