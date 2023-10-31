@@ -21,6 +21,10 @@ from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder import CertificateBuilder
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request_builder import \
+    CertificateSigningRequestBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
@@ -43,27 +47,26 @@ class PKICA(FlexiClass, properties={
         'readonly': True,
         'interpolate': FlexiClass.InterpolatorBehaviour.ON_SET,
     },
-    # PKICascade
-    'pki_cascade': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade.PKICascade', 'mandatory': True},
     # global parameters
     'nickname': {'mandatory': True},
     'name': {'default': '${nickname} Certificate Authority'},
-    'parent_nickname': {'readonly': True},
+    'parent': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca.PKICA'},
+    # 'parent_nickname': {'readonly': True},
     'default': {'type': bool, 'default': False},
     'domain': {'mandatory': True},
     'strict': {'type': bool, 'default': False},
     'stubby': {'type': bool, 'default': False},
     # CA key parameters
-    'key': {'type': PrivateKey},
-    'key_llo': {'type': rsa.RSAPrivateKey},
-    'key_size': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_SIZE},
-    'key_public_exponent': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT},
-    'key_encrypted': {'type': bool, 'default': Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED},
-    'key_passphrase': {'type': Passphrase},
-    'key_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
-    'key_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
-    'key_passphrase_length': {'type': int, 'default': Constants.DEFAULT_PASSPHRASE_LENGTH},
-    'key_passphrase_character_set': {'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET},
+    'private_key': {'type': PrivateKey},
+    'private_private_key_llo': {'type': rsa.RSAPrivateKey},
+    'private_key_size': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_SIZE},
+    'private_key_public_exponent': {'type': int, 'default': Constants.DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT},
+    'private_key_encrypted': {'type': bool, 'default': Constants.DEFAULT_PRIVATE_KEY_ENCRYPTED},
+    'private_key_passphrase': {'type': Passphrase},
+    'private_key_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
+    'private_key_passphrase_random': {'type': bool, 'default': Constants.DEFAULT_PASSPHRASE_RANDOM},
+    'private_key_passphrase_length': {'type': int, 'default': Constants.DEFAULT_PASSPHRASE_LENGTH},
+    'private_key_passphrase_character_set': {'default': Constants.DEFAULT_PASSPHRASE_CHARACTER_SET},
     # CA keystore parameters
     'keystore_passphrase': {'type': Passphrase},
     'keystore_passphrase_value': {'interpolate': FlexiClass.InterpolatorBehaviour.NEVER},
@@ -93,8 +96,8 @@ class PKICA(FlexiClass, properties={
     'certificate_revocation_lists_directory': {'default': '${root_directory}/crl'},
     # filename parts
     'ca_subdirectory': {'default': 'CA'},
-    'key_file_suffix': {'default': '.key'},
-    'key_passphrase_file_suffix': {'default': '.key_passphrase'},
+    'private_key_file_suffix': {'default': '.key'},
+    'private_key_passphrase_file_suffix': {'default': '.key_passphrase'},
     'keystore_file_suffix': {'default': '.keystore'},
     'keystore_passphrase_file_suffix': {'default': '.keystore_passphrase'},
     'certificate_signing_request_file_suffix': {'default': '.csr'},
@@ -105,13 +108,13 @@ class PKICA(FlexiClass, properties={
         'default':
             '${root_directory}/openssl.cnf'
     },
-    'ca_key_file': {
+    'ca_private_key_file': {
         'default':
-            '${private_directory}/${ca_subdirectory}/${nickname}${key_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${private_key_file_suffix}'
     },
-    'ca_key_passphrase_file': {
+    'ca_private_key_passphrase_file': {
         'default':
-            '${private_directory}/${ca_subdirectory}/${nickname}${key_passphrase_file_suffix}'
+            '${private_directory}/${ca_subdirectory}/${nickname}${private_key_passphrase_file_suffix}'
     },
     'keystore_file': {
         'default':
@@ -140,31 +143,77 @@ class PKICA(FlexiClass, properties={
 
         super().__init__(**kwargs)
 
-        self.setup()
-
-    def setup(self):
-
-        self.setup_directories()
-
-        if self.key_passphrase is None and self.key_encrypted:
-            with self.ignore_readonly('key_passphrase'):
-                self.key_passphrase = PassphraseBuilder().init_with_random(
-                    file=self.ca_key_passphrase_file,
-                    load_if_exists=True,
-                    save_if_needed=True,
-                    save_forced=False
+        if self.certificate_subject is None:
+            if self.certificate_subject_common_name is None:
+                with self.ignore_readonly('certificate_subject_common_name'):
+                    self.certificate_subject_common_name = self.name
+            with self.ignore_readonly('certificate_subject'):
+                self.certificate_subject = CertificateBuilderBase.compose_subject(
+                    country_name=self.certificate_subject_country_name,
+                    state_or_province_name=self.certificate_subject_state_or_province_name,
+                    locality_name=self.certificate_subject_locality_name,
+                    organization_name=self.certificate_subject_organization_name,
+                    organizational_unit_name=self.certificate_subject_organizational_unit_name,
+                    email_address=self.certificate_subject_email_address,
+                    common_name=self.certificate_subject_common_name
                 )
 
-        if self.key is None:
-            with self.ignore_readonly('key'):
-                self.key = PrivateKeyBuilder().init_new(
+    def setup(
+            self,
+            load_if_exists: bool = True,
+            save_if_needed: bool = True,
+            save_forced: bool = False
+    ):
+        self.setup_directories()
+        if self.private_key_passphrase is None and self.private_key_encrypted:
+            with self.ignore_readonly('private_key_passphrase'):
+                self.private_key_passphrase = PassphraseBuilder().init_with_random(
+                    file=self.ca_private_key_passphrase_file,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
+        if self.private_key is None:
+            with self.ignore_readonly('private_key'):
+                self.private_key = PrivateKeyBuilder().init_new(
                     nickname=self.nickname,
-                    file=self.ca_key_file,
-                    encrypted=self.key_encrypted,
-                    passphrase=self.key_passphrase,
-                    load_if_exists=True,
-                    save_if_needed=True,
-                    save_forced=False
+                    file=self.ca_private_key_file,
+                    encrypted=self.private_key_encrypted,
+                    passphrase=self.private_key_passphrase,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
+        if self.certificate_signing_request is None:
+            with self.ignore_readonly('certificate_signing_request'):
+                self.certificate_signing_request = CertificateSigningRequestBuilder().init_new(
+                    nickname=self.nickname,
+                    file=self.certificate_signing_request_file,
+                    private_key=self.private_key,
+                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                    subject=self.certificate_subject,
+                    alternative_names=None,
+                    extra_extensions=None,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
+        if self.certificate is None:
+            with self.ignore_readonly('certificate'):
+                self.certificate = CertificateBuilder().sign_csr(
+                    nickname=self.nickname,
+                    file=self.certificate_file,
+                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                    term=self.certificate_term,
+                    ca=self.parent,
+                    subject=self.certificate_subject,
+                    alternative_names=None,
+                    extra_extensions=None,
+                    private_key=self.private_key,
+                    certificate_signing_request=self.certificate_signing_request,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
                 )
 
     def setup_directories(self):
@@ -197,62 +246,219 @@ class PKICA(FlexiClass, properties={
     def issue(
             self,
             nickname: str,
-            certificate: Certificate,
-            file: str,
-            llo: x509.Certificate,
-            chain_file: str,
-            type: CertificateTypes,
-            term: int,
-            ca: PKICA,
-            subject_country: str,
-            subject_state_or_province: str,
-            subject_locality: str,
-            subject_organization: str,
-            subject_organizational_unit: str,
-            subject_email_address: str,
-            subject_common_name: str,
-            subject: x509.name.Name,
-            alternative_names: list[str],
-            extensions: list[str],
-            key: PrivateKey,
-            key_llo: rsa.RSAPrivateKey,
-            key_file: str,
-            key_size: int,
-            key_public_exponent: int,
-            key_encrypted: bool,
-            key_passphrase: Passphrase,
-            key_passphrase_file: str,
-            key_passphrase_value: str,
-            key_passphrase_random: bool,
-            key_passphrase_length: int,
-            key_passphrase_character_set: str,
-            certificate_signing_request: CertificateSigningRequest,
-            certificate_signing_request_llo: x509.CertificateSigningRequest,
-            certificate_signing_request_file: str
+            certificate_file: str = None,
+            certificate_llo: x509.Certificate = None,
+            certificate_chain_file: str = None,
+            certificate_type: CertificateTypes = None,
+            certificate_term: int = None,
+            certificate_subject_country: str = None,
+            certificate_subject_state_or_province: str = None,
+            certificate_subject_locality: str = None,
+            certificate_subject_organization: str = None,
+            certificate_subject_organizational_unit: str = None,
+            certificate_subject_email_address: str = None,
+            certificate_subject_common_name: str = None,
+            certificate_subject: x509.name.Name = None,
+            certificate_alternative_names: list[str] = None,
+            certificate_extensions: list[str] = None,
+            certificate_signing_request: CertificateSigningRequest = None,
+            certificate_signing_request_llo: x509.CertificateSigningRequest = None,
+            certificate_signing_request_file: str = None,
+            private_key: PrivateKey = None,
+            private_key_llo: rsa.RSAPrivateKey = None,
+            private_key_file: str = None,
+            private_key_size: int = None,
+            private_key_public_exponent: int = None,
+            private_key_encrypted: bool = None,
+            private_key_passphrase: Passphrase = None,
+            private_key_passphrase_file: str = None,
+            private_key_passphrase_value: str = None,
+            private_key_passphrase_random: bool = None,
+            private_key_passphrase_length: int = None,
+            private_key_passphrase_character_set: str = None,
+            load_if_exists: bool = True,
+            save_if_needed: bool = True,
+            save_forced: bool = False
     ) -> Certificate:
-        certificate.setup()
+        if certificate_signing_request is None:
+            if private_key is None:
+                if private_key_passphrase is None:
+                    if private_key_passphrase_file is None:
+                        private_key_passphrase_file = self.form_filename(
+                            nickname,
+                            Passphrase,
+                            suffix=self.private_key_passphrase_file_suffix
+                        )
+                    if private_key_passphrase_random:
+                        private_key_passphrase = PassphraseBuilder().init_with_random(
+                            file=private_key_passphrase_file,
+                            length=private_key_passphrase_length,
+                            character_set=private_key_passphrase_character_set,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
+                    elif private_key_passphrase_value is not None:
+                        private_key_passphrase = PassphraseBuilder().init_with_value(
+                            file=private_key_passphrase_file,
+                            value=private_key_passphrase_value,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
+                    else:
+                        private_key_passphrase = PassphraseBuilder().init_with_file(
+                            file=private_key_passphrase_file,
+                        )
+                if private_key_file is None:
+                    private_key_file = self.form_filename(
+                        nickname,
+                        PrivateKey,
+                        suffix=self.private_key_file_suffix
+                    )
+                if private_key_llo is None:
+                    private_key = PrivateKeyBuilder().init_new(
+                        nickname=nickname,
+                        file=private_key_file,
+                        size=private_key_size,
+                        public_exponent=private_key_public_exponent,
+                        encrypted=private_key_encrypted,
+                        passphrase=private_key_passphrase,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
+                else:
+                    private_key = PrivateKeyBuilder().init_with_llo(
+                        nickname=nickname,
+                        file=private_key_file,
+                        llo=private_key_llo,
+                        encrypted=private_key_encrypted,
+                        passphrase=private_key_passphrase,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
+            if certificate_signing_request_file is None:
+                certificate_signing_request_file = self.form_filename(
+                    nickname,
+                    CertificateSigningRequest,
+                    suffix=self.certificate_signing_request_file_suffix
+                )
+            if certificate_subject is None:
+                if certificate_subject_common_name is None:
+                    certificate_subject_common_name = nickname
+                certificate_subject = CertificateBuilderBase.compose_subject(
+                    country_name=certificate_subject_country,
+                    state_or_province_name=certificate_subject_state_or_province,
+                    locality_name=certificate_subject_locality,
+                    organization_name=certificate_subject_organization,
+                    organizational_unit_name=certificate_subject_organizational_unit,
+                    email_address=certificate_subject_email_address,
+                    common_name=certificate_subject_common_name
+                )
+            if certificate_signing_request_llo is None:
+                certificate_signing_request = CertificateSigningRequestBuilder().init_new(
+                    nickname=nickname,
+                    file=certificate_signing_request_file,
+                    private_key=private_key,
+                    certificate_type=certificate_type,
+                    subject=certificate_subject,
+                    alternative_names=certificate_alternative_names,
+                    extra_extensions=certificate_extensions,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
+            else:
+                certificate_signing_request = CertificateSigningRequestBuilder().init_with_llo(
+                    nickname=nickname,
+                    file=certificate_signing_request_file,
+                    llo=certificate_signing_request_llo,
+                    private_key=private_key,
+                    save=True
+                )
+        if certificate_file is None:
+            certificate_file = self.form_filename(
+                nickname,
+                Certificate,
+                suffix=self.certificate_file_suffix
+            )
+        if certificate_chain_file is None:
+            certificate_chain_file = self.form_filename(
+                nickname,
+                Certificate,
+                suffix=self.certificate_chain_file_suffix
+            )
+        if certificate_llo is None:
+            certificate = CertificateBuilder().sign_csr(
+                nickname=nickname,
+                file=certificate_file,
+                chain_file=certificate_chain_file,
+                certificate_type=certificate_type,
+                term=certificate_term,
+                ca=self,
+                subject=certificate_subject,
+                alternative_names=certificate_alternative_names,
+                extra_extensions=certificate_extensions,
+                private_key=private_key,
+                certificate_signing_request=certificate_signing_request,
+                load_if_exists=load_if_exists,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced,
+                save_chain=True
+            )
+        else:
+            certificate = CertificateBuilder().init_with_llo(
+                nickname=nickname,
+                file=certificate_file,
+                chain_file=certificate_chain_file,
+                llo=certificate_llo,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced,
+                save_chain=True
+            )
+        CertificateBuilder._check_after_load(
+            certificate,
+            {
+                'nickname': nickname,
+                'file': certificate_file,
+                'chain_file': certificate_chain_file,
+                'certificate_type': certificate_type,
+                'term': certificate_term,
+                'ca': self,
+                'subject': certificate_subject,
+                'alternative_names': certificate_alternative_names,
+                'extra_extensions': certificate_extensions,
+                'private_key': private_key,
+                'certificate_signing_request': certificate_signing_request,
+            }
+        )
         return certificate
 
-    # def form_filename(
-    #         self,
-    #         object_name: str,
-    #         object_type: type,
-    #         prefix: str,
-    #         suffix: str
-    # ):
-    #     if object_type == Certificate:
-    #         prefix = self.certificates_directory if prefix is not None else prefix
-    #         suffix = self.certificate_file_suffix if suffix is None else suffix
-    #     elif object_type == CertificateSigningRequest:
-    #         prefix = self.certificate_signing_requests_directory if prefix is not None else prefix
-    #         suffix = self.certificate_signing_request_file_suffix if suffix is None else suffix
-    #     elif object_type == PrivateKey:
-    #         prefix = self.private_directory if prefix is not None else prefix
-    #         suffix = self.key_file_suffix if suffix is None else suffix
-    #     elif object_type == Passphrase:
-    #         prefix = self.private_directory if prefix is not None else prefix
-    #         suffix = self.key_passphrase_file_suffix if suffix is None else suffix
-    #     else:
-    #         raise Exception(f"Unsupported object type '{object_type}'")
-    #     return f"{prefix}/{object_name}{suffix}"
+    def form_filename(
+            self,
+            nickname: str,
+            object_type: type,
+            prefix: str = None,
+            suffix: str = None
+    ):
+        if object_type == Certificate:
+            prefix = self.certificates_directory if prefix is None else prefix
+            suffix = self.certificate_file_suffix if suffix is None else suffix
+        elif object_type == CertificateSigningRequest:
+            prefix = self.certificate_signing_requests_directory if prefix is None else prefix
+            suffix = self.certificate_signing_request_file_suffix if suffix is None else suffix
+        elif object_type == PrivateKey:
+            prefix = self.private_directory if prefix is None else prefix
+            suffix = self.private_key_file_suffix if suffix is None else suffix
+        elif object_type == Passphrase:
+            prefix = self.private_directory if prefix is None else prefix
+            suffix = self.private_key_passphrase_file_suffix if suffix is None else suffix
+        else:
+            raise Exception(f"Unsupported object type '{object_type}'")
+        return f"{prefix}/{nickname}{suffix}"
 
+    def get_pem_chain(self):
+        logging.debug('Getting PEM chain for CA %s', self.nickname)
+        return self.certificate.get_pem() + (self.parent.get_pem_chain() if self.parent is not None else b'')

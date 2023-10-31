@@ -21,7 +21,6 @@ from cryptography import x509
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
     CertificateSigningRequest
-from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca import PKICA
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes, Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
@@ -44,7 +43,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
     'chain_file': {},
     'certificate_type': {'type': CertificateTypes, 'default': Constants.DEFAULT_CERTIFICATE_TYPE},
     'term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
-    'ca': {'type': PKICA},
+    'ca': {'type': 'ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca.PKICA'},
     'issuer_private_key': {'type': PrivateKey},
     'issuer_subject': {'type': x509.name.Name},
     'private_key': {'type': PrivateKey},
@@ -98,10 +97,10 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
                 raise ValueError(f"The issuer_subject parameter is given as "
                                  f"{parameters_assigned.get('issuer_subject')} but "
                                  f"the CA has a different subject which is {ca_issuer_subject}")
-        if 'alternative_names' in parameters_to_assign and parameters_assigned.get('alternative_names') is None:
-            parameters_assigned['alternative_names'] = []
-        if 'extra_extensions' in parameters_to_assign and parameters_assigned.get('extra_extensions') is None:
-            parameters_assigned['extra_extensions'] = []
+        # if 'alternative_names' in parameters_to_assign and parameters_assigned.get('alternative_names') is None:
+        #     parameters_assigned['alternative_names'] = []
+        # if 'extra_extensions' in parameters_to_assign and parameters_assigned.get('extra_extensions') is None:
+        #     parameters_assigned['extra_extensions'] = []
         return parameters_assigned
 
     @staticmethod
@@ -113,8 +112,8 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
         result = FlexiBuilder.check_after_load_universal(
             object_to_check=certificate,
             parameters_assigned=parameters_assigned,
-            parameters_to_check=['certificate_type', 'term', 'ca', 'private_key', 'subject',
-                                 'alternative_names', 'extra_extensions'],
+            parameters_to_check=['certificate_type', 'term', 'private_key', 'subject', 'alternative_names',
+                                 'extra_extensions'],
             raise_exception=raise_exception
         )
         return result
@@ -139,6 +138,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             self,
             nickname: str = None,
             file: str = None,
+            chain_file: str = None,
             llo: x509.Certificate = None,
             private_key: PrivateKey = None,
             save_if_needed: bool = True,
@@ -148,6 +148,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
         parameters_assigned = self._assign_parameters({
             'nickname': {'mandatory': True},
             'file': {'mandatory': True},
+            'chain_file': {},
             'llo': {'mandatory': True},
             'private_key': {'mandatory': True},
         })
@@ -157,8 +158,8 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
         generated = False
         if save_forced or (save_if_needed and generated):
             certificate.save()
-        if save_chain:
-            certificate.save_chain()
+            if save_chain:
+                certificate.save_chain()
         return certificate
 
     def sign_instantly(
@@ -168,7 +169,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             chain_file: str = None,
             certificate_type: CertificateTypes = None,
             term: int = None,
-            ca: PKICA = None,
+            ca: object = None,
             issuer_private_key: PrivateKey = None,
             issuer_subject: x509.name.Name = None,
             private_key: PrivateKey = None,
@@ -231,7 +232,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             chain_file: str = None,
             certificate_type: CertificateTypes = None,
             term: int = None,
-            ca: PKICA = None,
+            ca: object = None,
             issuer_private_key: PrivateKey = None,
             issuer_subject: x509.name.Name = None,
             private_key: PrivateKey = None,

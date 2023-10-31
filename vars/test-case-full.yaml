@@ -8,40 +8,40 @@ pki_ca_cascade:
     certificate_subject_organization_name: TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA
     certificate_subject_organizational_unit_name: Security Service
     certificate_subject_email_address: security@kloudster.net
-    key_passphrase_random: true
+    private_key_passphrase_random: true
   root:
     __parameters:
       name: Root Certificate Authority (${domain})
-      key_encrypted: true
-      key_size: 4096
+      private_key_encrypted: true
+      private_key_size: 4096
       strict: false
       stubby: false
     intermediate:
       __parameters:
         default: true
         name: Intermediate Certificate Authority (${domain})
-        key_encrypted: true
-        key_size: 2048
+        private_key_encrypted: true
+        private_key_size: 2048
         strict: false
         stubby: false
       pfsense:
         __parameters:
           name: pfSense Router Certificate Authority (${domain})
-          key_encrypted: false
-          key_size: 2048
+          private_key_encrypted: false
+          private_key_size: 2048
           strict: true
           stubby: false
     elastic:
       __parameters:
         name: Elastic Certificate Authority (${domain})
-        key_encrypted: false
-        key_size: 2048
+        private_key_encrypted: false
+        private_key_size: 2048
         strict: false
         stubby: true
   kubernetes:
     __parameters:
       name: Kubernetes Cluster Certificate Authority (${domain})
-      key_encrypted: false
-      key_size: 2048
+      private_key_encrypted: false
+      private_key_size: 2048
       strict: false
       stubby: false

@@ -30,6 +30,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
 
 
 # noinspection PyCompatibility
+# noinspection PyAttributeOutsideInit
 class FlexiClass:
     """@DynamicAttrs"""
 

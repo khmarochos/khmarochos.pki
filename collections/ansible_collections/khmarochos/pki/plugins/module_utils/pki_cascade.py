@@ -70,7 +70,11 @@ class PKICascade(FlexiClass, properties={
             logging.debug(f"PKICascade.traverse_cascade(): nickname = {nickname}")
             logging.debug(f"PKICascade.traverse_cascade(): parent_nickname = {parent_nickname}")
             logging.debug(f"PKICascade.traverse_cascade(): parameters = {parameters}")
-            pki_ca = PKICA(pki_cascade=self, nickname=nickname, parent_nickname=parent_nickname, **parameters)
+            pki_ca = PKICA(
+                nickname=nickname,
+                parent=self.get_ca(parent_nickname, loose=True),
+                **parameters
+            )
             self.add_ca(pki_ca)
         # If there are branches, traverse them
         for child_nickname, child_branch in branch.items():

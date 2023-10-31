@@ -150,7 +150,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
         if tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFINED:
             provided_to_testset['certificate_subject_common_name'] = randomizer
             provided_to_testset['certificate_alternative_names'] = randomizer
-            provided_to_testset['certificate_extra_extensions'] = []
+            provided_to_testset['certificate_extra_extensions'] = None
         elif tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFAULT:
             pass
         else:
@@ -181,10 +181,10 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
             expected_in_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_outcome['extra_extensions'] = testset.certificate_extra_extensions
         elif tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFAULT:
-            expected_in_builder['alternative_names'] = None
-            expected_in_outcome['alternative_names'] = []
-            expected_in_builder['extra_extensions'] = None
-            expected_in_outcome['extra_extensions'] = []
+            expected_in_builder['alternative_names'] = (TT.NONE,)
+            expected_in_outcome['alternative_names'] = (TT.NONE,)
+            expected_in_builder['extra_extensions'] = (TT.NONE,)
+            expected_in_outcome['extra_extensions'] = (TT.NONE,)
         else:
             raise ValueError(f'Unexpected tp_values value: {tp_values_assignment}')
 

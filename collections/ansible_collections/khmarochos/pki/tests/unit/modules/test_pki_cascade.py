@@ -35,7 +35,13 @@ class InitCascadeTest(unittest.TestCase):
         for pki_ca in pki_cascade.pki_cascade.values():
             pki_ca.setup()
         for pki_ca in pki_cascade.pki_cascade.values():
-            certificate = pki_ca.issue(subject_common_name='test', type=CertificateTypes.CLIENT, term=1)
+            certificate = pki_ca.issue(
+                nickname='test',
+                certificate_type=CertificateTypes.CLIENT,
+                certificate_term=1,
+                private_key_encrypted=True,
+                private_key_passphrase_random=True
+            )
             logging.debug(certificate.get_properties())
 
 if __name__ == '__main__':

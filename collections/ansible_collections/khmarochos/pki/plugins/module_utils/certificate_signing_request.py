@@ -34,8 +34,8 @@ class CertificateSigningRequest(CertificateBase, FlexiClass, properties={
     'file': {'mandatory': True},
     'certificate_type': {'type': CertificateTypes},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list, 'default': []},
-    'extra_extensions': {'type': list, 'default': []},
+    'alternative_names': {'type': list},
+    'extra_extensions': {'type': list},
     'private_key': {'type': PrivateKey},
 }):
 

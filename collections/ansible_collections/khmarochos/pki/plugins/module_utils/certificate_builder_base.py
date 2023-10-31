@@ -54,8 +54,6 @@ class CertificateBuilderBase:
             term: int = Constants.DEFAULT_CERTIFICATE_TERM
     ) -> Union[x509.Certificate, x509.CertificateSigningRequest]:
         builder = builder.subject_name(subject)
-        alternative_names = alternative_names if alternative_names is not None else []
-        extra_extensions = extra_extensions if extra_extensions is not None else []
         key_usage_dictionary = {
             'digital_signature': False,
             'content_commitment': False,
@@ -102,16 +100,17 @@ class CertificateBuilderBase:
             x509.SubjectKeyIdentifier.from_public_key(private_key.llo.public_key()),
             False
         )
-        if len(alternative_names) > 0:
+        if alternative_names is not None and len(alternative_names) > 0:
             builder = builder.add_extension(
                 x509.SubjectAlternativeName([x509.DNSName(alternative_name) for alternative_name in alternative_names]),
                 False
             )
-        for extension_to_add in extra_extensions:
-            builder = builder.add_extension(
-                extension_to_add['extension'],
-                extension_to_add['critical']
-            )
+        if extra_extensions is not None and len(extra_extensions) > 0:
+            for extension_to_add in extra_extensions:
+                builder = builder.add_extension(
+                    extension_to_add['extension'],
+                    extension_to_add['critical']
+                )
         if isinstance(builder, x509.CertificateBuilder):
             builder = builder.issuer_name(issuer_subject)
             builder = builder.public_key(private_key.llo.public_key())

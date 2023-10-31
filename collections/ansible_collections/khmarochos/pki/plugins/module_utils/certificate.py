@@ -12,20 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import datetime
 import logging
-from typing import Union
 
 from cryptography import x509
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives import hashes
 
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_base import CertificateBase
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
-from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
-from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_base \
+    import CertificateBase
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants \
+    import CertificateTypes
+from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass \
+    import FlexiClass
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key \
+    import PrivateKey
 
 
 class Certificate(CertificateBase, FlexiClass, properties={
@@ -82,4 +82,5 @@ class Certificate(CertificateBase, FlexiClass, properties={
                 f.write(self.get_pem_chain())
 
     def get_pem_chain(self):
-        return self.get_pem() + (self.ca.certificate.get_pem_chain() if self.ca is not None else b'')
+        logging.debug('Getting PEM chain for certificate %s', self.nickname)
+        return self.get_pem() + (self.ca.get_pem_chain() if self.ca is not None else b'')

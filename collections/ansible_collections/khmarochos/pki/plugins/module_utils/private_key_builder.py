@@ -65,7 +65,6 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
             if parameters_assigned.get('passphrase') is not None:
                 raise ValueError('The passphrase parameter cannot be set if the encrypted parameter is False')
             elif parameters_assigned.get('encryption_algorithm') is None:
-                logging.debug('The encryption_algorithm parameter has not been set')
                 parameters_assigned['encryption_algorithm'] = serialization.NoEncryption()
             elif not isinstance(parameters_assigned.get('encryption_algorithm'), serialization.NoEncryption):
                 raise ValueError('The encryption_algorithm parameter must be serialization.NoEncryption '

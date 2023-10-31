@@ -63,6 +63,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
     class TPInit(Enum):
         NEW = 'creating a new certificate'
         NEW_WHEN_EXISTS = 'creating a new certificate when it already exists'
+        NEW_WHEN_EXISTS_BUT_INCONSISTENT = 'creating a new certificate when it already exists but is inconsistent'
         FROM_LLO = 'get a certificate from x509.Certificate'
         FROM_FILE = 'get a certificate from a file'
 
@@ -187,8 +188,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Root CA',
-                certificate_alternative_names=[],
-                certificate_extra_extensions=[],
+                certificate_alternative_names=None,
+                certificate_extra_extensions=None,
             )
             certificate_ca_root = CertificateBuilder(
                 nickname=testset_ca_root.nickname,
@@ -235,8 +236,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Intermediate CA (the 1st level)',
-                certificate_alternative_names=[],
-                certificate_extra_extensions=[],
+                certificate_alternative_names=None,
+                certificate_extra_extensions=None,
             )
             certificate_ca_intermediate_1 = CertificateBuilder(
                 nickname=testset_ca_intermediate_1.nickname,
@@ -284,8 +285,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Intermediate CA (the 2nd level)',
-                certificate_alternative_names=[],
-                certificate_extra_extensions=[],
+                certificate_alternative_names=None,
+                certificate_extra_extensions=None,
             )
             certificate_ca_intermediate_2 = CertificateBuilder(
                 nickname=testset_ca_intermediate_2.nickname,
@@ -346,7 +347,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             provided_to_testset['certificate_subject_common_name'] = randomizer
             provided_to_testset['certificate_alternative_names_number'] = randomizer
             provided_to_testset['certificate_alternative_names'] = randomizer
-            provided_to_testset['certificate_extra_extensions'] = []
+            provided_to_testset['certificate_extra_extensions'] = None
         elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             pass
         else:
@@ -402,10 +403,10 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             expected_in_builder['term'] = None
             expected_in_outcome['term'] = Constants.DEFAULT_CERTIFICATE_TERM
-            expected_in_builder['alternative_names'] = None
-            expected_in_outcome['alternative_names'] = []
-            expected_in_builder['extra_extensions'] = None
-            expected_in_outcome['extra_extensions'] = []
+            expected_in_builder['alternative_names'] = (TT.NONE,)
+            expected_in_outcome['alternative_names'] = (TT.NONE,)
+            expected_in_builder['extra_extensions'] = (TT.NONE,)
+            expected_in_outcome['extra_extensions'] = (TT.NONE,)
         else:
             raise ValueError(f'Unexpected tp_values value: {tp_values_assignment}')
         if tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
@@ -447,22 +448,23 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         else:
             raise ValueError(f'Unexpected tp_issuer value: {tp_issuer}')
 
-        logging.debug(
-            '%s: %s; %s; %s; %s.',
-            name,
-            tp_parameters_passing.value,
-            tp_values_assignment.value,
-            tp_request.value,
-            tp_issuer.value,
-        )
-        logging.debug('Parameters provided to the testset: %s', provided_to_testset)
-        logging.debug('Parameters provided to the builder: %s', provided_to_builder)
-        logging.debug('Parameters expected in the builder: %s', expected_in_builder)
-        logging.debug('Parameters expected in the outcome: %s', expected_in_outcome)
-
         certificate = None
 
         for tp_init in list(TestCertificateBuilder.TPInit):
+
+            logging.debug(
+                '%s: %s; %s; %s; %s; %s.',
+                name,
+                tp_parameters_passing.value,
+                tp_values_assignment.value,
+                tp_request.value,
+                tp_issuer.value,
+                tp_init.value,
+            )
+            logging.debug('Parameters provided to the testset: %s', provided_to_testset)
+            logging.debug('Parameters provided to the builder: %s', provided_to_builder)
+            logging.debug('Parameters expected in the builder: %s', expected_in_builder)
+            logging.debug('Parameters expected in the outcome: %s', expected_in_outcome)
 
             if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.CONSTRUCTOR:
                 certificate_builder = CertificateBuilder(**provided_to_builder)
@@ -529,6 +531,21 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
             elif tp_init == TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS:
                 if tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
+                    certificate = certificate_builder.sign_instantly(**(
+                        provided_to_builder
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {}
+                    ), load_if_exists=True)
+                elif tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
+                    certificate = certificate_builder.sign_csr(**(
+                        provided_to_builder
+                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
+                        else {}
+                    ), load_if_exists=True)
+                else:
+                    raise ValueError(f'Unknown test parameter value ({tp_request})')
+            elif tp_init == TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS_BUT_INCONSISTENT:
+                if tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
                     with self.assertRaises(RuntimeError):
                         certificate_builder.sign_instantly(
                             **{
@@ -542,11 +559,6 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                                 }
                             }
                         )
-                    certificate = certificate_builder.sign_instantly(**(
-                        provided_to_builder
-                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
-                        else {}
-                    ), load_if_exists=True)
                 elif tp_request == TestCertificateBuilder.TPSigningRequest.CSR:
                     with self.assertRaises(RuntimeError):
                         certificate_builder.sign_csr(
@@ -561,11 +573,6 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                                 }
                             }
                        )
-                    certificate = certificate_builder.sign_csr(**(
-                        provided_to_builder
-                        if tp_parameters_passing == TestCertificateBuilder.TPParametersPassing.FINAL_CALL
-                        else {}
-                    ), load_if_exists=True)
                 else:
                     raise ValueError(f'Unknown test parameter value ({tp_request})')
             elif tp_init == TestCertificateBuilder.TPInit.FROM_LLO:
