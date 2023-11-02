@@ -86,6 +86,10 @@ class PKICascade(FlexiClass, properties={
                     parameters=parameters_propagated
                 )
 
+    def setup(self) -> None:
+        for pki_ca in self.pki_cascade.values():
+            pki_ca.setup()
+
     def add_ca(self, pki_ca: PKICA) -> None:
         self.pki_cascade.update({pki_ca.nickname: pki_ca})
 

@@ -83,15 +83,36 @@ class CertificateBuilderBase:
                 True
             )
             builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
-        else:
+        elif certificate_type == CertificateTypes.CLIENT:
             key_usage_dictionary['digital_signature'] = True
             key_usage_dictionary['key_encipherment'] = True
             key_usage_dictionary['data_encipherment'] = True
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]),
+                True
+            )
             builder = builder.add_extension(
                 x509.BasicConstraints(ca=False, path_length=None),
                 True
             )
             builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
+        elif certificate_type == CertificateTypes.SERVER:
+            key_usage_dictionary['digital_signature'] = True
+            key_usage_dictionary['key_encipherment'] = True
+            key_usage_dictionary['data_encipherment'] = True
+            builder = builder.add_extension(
+                x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+                True
+            )
+            builder = builder.add_extension(
+                x509.BasicConstraints(ca=False, path_length=None),
+                True
+            )
+            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
+        else:
+            raise ValueError(f"Unknown certificate type: {certificate_type}")
+        if not_valid_before is None:
+            not_valid_before = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
         builder = builder.add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_private_key.llo.public_key()),
             False
@@ -118,15 +139,11 @@ class CertificateBuilderBase:
                 serial_number
                 if serial_number is not None
                 else x509.random_serial_number())
-            builder = builder.not_valid_before(
-                not_valid_before
-                if not_valid_before is not None
-                else datetime.datetime.utcnow()
-            )
+            builder = builder.not_valid_before(not_valid_before)
             builder = builder.not_valid_after(
                 not_valid_after
                 if not_valid_after is not None
-                else datetime.datetime.utcnow() + datetime.timedelta(days=term)
+                else not_valid_before + datetime.timedelta(days=term)
             )
         return builder.sign(
             private_key=issuer_private_key.llo,

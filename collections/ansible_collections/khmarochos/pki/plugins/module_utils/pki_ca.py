@@ -178,12 +178,14 @@ class PKICA(FlexiClass, properties={
                 self.private_key = PrivateKeyBuilder().init_new(
                     nickname=self.nickname,
                     file=self.ca_private_key_file,
+                    size=self.private_key_size,
                     encrypted=self.private_key_encrypted,
                     passphrase=self.private_key_passphrase,
                     load_if_exists=load_if_exists,
                     save_if_needed=save_if_needed,
                     save_forced=save_forced
                 )
+                # logging.debug(f"--- {self.nickname}: {private_key.size} ? {private_key_size}")
         if self.certificate_signing_request is None:
             with self.ignore_readonly('certificate_signing_request'):
                 self.certificate_signing_request = CertificateSigningRequestBuilder().init_new(

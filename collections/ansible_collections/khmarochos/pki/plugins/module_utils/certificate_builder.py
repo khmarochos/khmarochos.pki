@@ -97,10 +97,6 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
                 raise ValueError(f"The issuer_subject parameter is given as "
                                  f"{parameters_assigned.get('issuer_subject')} but "
                                  f"the CA has a different subject which is {ca_issuer_subject}")
-        # if 'alternative_names' in parameters_to_assign and parameters_assigned.get('alternative_names') is None:
-        #     parameters_assigned['alternative_names'] = []
-        # if 'extra_extensions' in parameters_to_assign and parameters_assigned.get('extra_extensions') is None:
-        #     parameters_assigned['extra_extensions'] = []
         return parameters_assigned
 
     @staticmethod

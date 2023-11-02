@@ -1,18 +1,37 @@
 - name: Example playbook
+
   hosts:
     - localhost
+
   vars_files:
     - vars/test-case-full.yaml
+
   tasks:
-    - name: Use module from collection source
+
+    - name: Initialise the configuration dictionary
       khmarochos.pki.init_dictionary:
         pki_ca_cascade: "{{ pki_ca_cascade }}"
-      register: result
+      register: configuration_dictionary
+
+    - name: Retrieve the calculations' result
+      set_fact:
+        configuration_dictionary: "{{ configuration_dictionary.result }}"
+
     - name: Show the calculations' result
       debug:
-        msg: "{{ result.result }}"
-    - name: Use module from collection source
+        msg: "{{ configuration_dictionary }}"
+
+    - name: Initialise the PKI cascade
       khmarochos.pki.init_pki:
         pki_ca_cascade: "{{ pki_ca_cascade }}"
-    - debug:
-        msg: "I hope, you're satisfied with the result ;-)"
+
+    - name: Issue a certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test
+          certificate_type: server
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true

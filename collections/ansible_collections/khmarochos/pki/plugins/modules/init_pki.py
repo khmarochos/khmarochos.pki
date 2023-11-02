@@ -32,16 +32,15 @@ def main():
 
     try:
         pki_cascade = PKICascade(module.params['pki_ca_cascade'])
-        for pki_ca in pki_cascade.pki_cascade.values():
-            module.log(msg=f"Setting up the {pki_ca.nickname} CA")
-            pki_ca.setup()
-
-    except PKICascadeError as e:
-        module.fail_json(msg=f"Can't traverse the CA cascade: {e}")
     except Exception as e:
-        module.fail_json(msg=e.__str__())
+        module.fail_json(msg=f"Can't traverse the CA cascade: {e.__str__()}")
 
-    module.exit_json(changed=False, result=pki_cascade.pki_cascade_json())
+    try:
+        pki_cascade.setup()
+    except Exception as e:
+        module.fail_json(msg=f"Can't set up the CA cascade: {e.__str__()}")
+
+    module.exit_json(changed=True, result=pki_cascade.pki_cascade_json())
 
 if __name__ == '__main__':
     main()

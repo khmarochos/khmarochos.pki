@@ -51,10 +51,6 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
             parameters_to_merge: dict = None,
             parameters_assigned: dict = None
     ) -> dict:
-        # if 'alternative_names' in parameters_assigned and parameters_assigned.get('alternative_names') is None:
-        #     parameters_assigned['alternative_names'] = []
-        # if 'extra_extensions' in parameters_assigned and parameters_assigned.get('extra_extensions') is None:
-        #     parameters_assigned['extra_extensions'] = []
         return parameters_assigned
 
     @staticmethod
