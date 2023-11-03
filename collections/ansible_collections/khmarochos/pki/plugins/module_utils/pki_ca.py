@@ -25,6 +25,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request_builder import \
     CertificateSigningRequestBuilder
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
@@ -38,7 +39,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.private_key_builder
 
 
 # noinspection PyCompatibility
-class PKICA(FlexiClass, properties={
+class PKICA(ChangeTracker, FlexiClass, properties={
     # default parameters for parameters' definitions
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
@@ -167,56 +168,58 @@ class PKICA(FlexiClass, properties={
         self.setup_directories()
         if self.private_key_passphrase is None and self.private_key_encrypted:
             with self.ignore_readonly('private_key_passphrase'):
-                self.private_key_passphrase = PassphraseBuilder().init_with_random(
-                    file=self.ca_private_key_passphrase_file,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced
-                )
+                self.private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
+                    .init_with_random(
+                        file=self.ca_private_key_passphrase_file,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
         if self.private_key is None:
             with self.ignore_readonly('private_key'):
-                self.private_key = PrivateKeyBuilder().init_new(
-                    nickname=self.nickname,
-                    file=self.ca_private_key_file,
-                    size=self.private_key_size,
-                    encrypted=self.private_key_encrypted,
-                    passphrase=self.private_key_passphrase,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced
-                )
-                # logging.debug(f"--- {self.nickname}: {private_key.size} ? {private_key_size}")
+                self.private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
+                    .init_new(
+                        nickname=self.nickname,
+                        file=self.ca_private_key_file,
+                        size=self.private_key_size,
+                        encrypted=self.private_key_encrypted,
+                        passphrase=self.private_key_passphrase,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
         if self.certificate_signing_request is None:
             with self.ignore_readonly('certificate_signing_request'):
-                self.certificate_signing_request = CertificateSigningRequestBuilder().init_new(
-                    nickname=self.nickname,
-                    file=self.certificate_signing_request_file,
-                    private_key=self.private_key,
-                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
-                    subject=self.certificate_subject,
-                    alternative_names=None,
-                    extra_extensions=None,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced
-                )
+                self.certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
+                    .init_new(
+                        nickname=self.nickname,
+                        file=self.certificate_signing_request_file,
+                        private_key=self.private_key,
+                        certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                        subject=self.certificate_subject,
+                        alternative_names=None,
+                        extra_extensions=None,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
         if self.certificate is None:
             with self.ignore_readonly('certificate'):
-                self.certificate = CertificateBuilder().sign_csr(
-                    nickname=self.nickname,
-                    file=self.certificate_file,
-                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
-                    term=self.certificate_term,
-                    ca=self.parent,
-                    subject=self.certificate_subject,
-                    alternative_names=None,
-                    extra_extensions=None,
-                    private_key=self.private_key,
-                    certificate_signing_request=self.certificate_signing_request,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced
-                )
+                self.certificate = CertificateBuilder(changes_stack=self.changes_stack).sign_csr(
+                        nickname=self.nickname,
+                        file=self.certificate_file,
+                        certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                        term=self.certificate_term,
+                        ca=self.parent,
+                        subject=self.certificate_subject,
+                        alternative_names=None,
+                        extra_extensions=None,
+                        private_key=self.private_key,
+                        certificate_signing_request=self.certificate_signing_request,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
 
     def setup_directories(self):
         for directory, mode in {
@@ -244,6 +247,7 @@ class PKICA(FlexiClass, properties={
                     raise Exception(f"Path '{directory}' exists but has wrong permissions")
             else:
                 os.makedirs(directory, mode=mode)
+                self.changes_stack.push(f"Directory '{directory}' created")
 
     def issue(
             self,
@@ -292,26 +296,29 @@ class PKICA(FlexiClass, properties={
                             suffix=self.private_key_passphrase_file_suffix
                         )
                     if private_key_passphrase_random:
-                        private_key_passphrase = PassphraseBuilder().init_with_random(
-                            file=private_key_passphrase_file,
-                            length=private_key_passphrase_length,
-                            character_set=private_key_passphrase_character_set,
-                            load_if_exists=load_if_exists,
-                            save_if_needed=save_if_needed,
-                            save_forced=save_forced
-                        )
+                        private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
+                            .init_with_random(
+                                file=private_key_passphrase_file,
+                                length=private_key_passphrase_length,
+                                character_set=private_key_passphrase_character_set,
+                                load_if_exists=load_if_exists,
+                                save_if_needed=save_if_needed,
+                                save_forced=save_forced
+                            )
                     elif private_key_passphrase_value is not None:
-                        private_key_passphrase = PassphraseBuilder().init_with_value(
-                            file=private_key_passphrase_file,
-                            value=private_key_passphrase_value,
-                            load_if_exists=load_if_exists,
-                            save_if_needed=save_if_needed,
-                            save_forced=save_forced
-                        )
+                        private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
+                            .init_with_value(
+                                file=private_key_passphrase_file,
+                                value=private_key_passphrase_value,
+                                load_if_exists=load_if_exists,
+                                save_if_needed=save_if_needed,
+                                save_forced=save_forced
+                            )
                     else:
-                        private_key_passphrase = PassphraseBuilder().init_with_file(
-                            file=private_key_passphrase_file,
-                        )
+                        private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
+                            .init_with_file(
+                                file=private_key_passphrase_file,
+                            )
                 if private_key_file is None:
                     private_key_file = self.form_filename(
                         nickname,
@@ -319,28 +326,30 @@ class PKICA(FlexiClass, properties={
                         suffix=self.private_key_file_suffix
                     )
                 if private_key_llo is None:
-                    private_key = PrivateKeyBuilder().init_new(
-                        nickname=nickname,
-                        file=private_key_file,
-                        size=private_key_size,
-                        public_exponent=private_key_public_exponent,
-                        encrypted=private_key_encrypted,
-                        passphrase=private_key_passphrase,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
+                        .init_new(
+                            nickname=nickname,
+                            file=private_key_file,
+                            size=private_key_size,
+                            public_exponent=private_key_public_exponent,
+                            encrypted=private_key_encrypted,
+                            passphrase=private_key_passphrase,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
                 else:
-                    private_key = PrivateKeyBuilder().init_with_llo(
-                        nickname=nickname,
-                        file=private_key_file,
-                        llo=private_key_llo,
-                        encrypted=private_key_encrypted,
-                        passphrase=private_key_passphrase,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
+                        .init_with_llo(
+                            nickname=nickname,
+                            file=private_key_file,
+                            llo=private_key_llo,
+                            encrypted=private_key_encrypted,
+                            passphrase=private_key_passphrase,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
             if certificate_signing_request_file is None:
                 certificate_signing_request_file = self.form_filename(
                     nickname,
@@ -360,26 +369,40 @@ class PKICA(FlexiClass, properties={
                     common_name=certificate_subject_common_name
                 )
             if certificate_signing_request_llo is None:
-                certificate_signing_request = CertificateSigningRequestBuilder().init_new(
-                    nickname=nickname,
-                    file=certificate_signing_request_file,
-                    private_key=private_key,
-                    certificate_type=certificate_type,
-                    subject=certificate_subject,
-                    alternative_names=certificate_alternative_names,
-                    extra_extensions=certificate_extensions,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced
-                )
+                certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
+                    .init_new(
+                        nickname=nickname,
+                        file=certificate_signing_request_file,
+                        private_key=private_key,
+                        certificate_type=certificate_type,
+                        subject=certificate_subject,
+                        alternative_names=certificate_alternative_names,
+                        extra_extensions=certificate_extensions,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
             else:
-                certificate_signing_request = CertificateSigningRequestBuilder().init_with_llo(
-                    nickname=nickname,
-                    file=certificate_signing_request_file,
-                    llo=certificate_signing_request_llo,
-                    private_key=private_key,
-                    save=True
-                )
+                certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
+                    .init_with_llo(
+                        nickname=nickname,
+                        file=certificate_signing_request_file,
+                        llo=certificate_signing_request_llo,
+                        private_key=private_key,
+                        save=True
+                    )
+            CertificateBuilder._check_after_load(
+                certificate_signing_request,
+                {
+                    'nickname': nickname,
+                    'file': certificate_signing_request_file,
+                    'private_key': private_key,
+                    'certificate_type': certificate_type,
+                    'subject': certificate_subject,
+                    'alternative_names': certificate_alternative_names,
+                    'extra_extensions': certificate_extensions,
+                }
+            )
         if certificate_file is None:
             certificate_file = self.form_filename(
                 nickname,
@@ -393,33 +416,34 @@ class PKICA(FlexiClass, properties={
                 suffix=self.certificate_chain_file_suffix
             )
         if certificate_llo is None:
-            certificate = CertificateBuilder().sign_csr(
-                nickname=nickname,
-                file=certificate_file,
-                chain_file=certificate_chain_file,
-                certificate_type=certificate_type,
-                term=certificate_term,
-                ca=self,
-                subject=certificate_subject,
-                alternative_names=certificate_alternative_names,
-                extra_extensions=certificate_extensions,
-                private_key=private_key,
-                certificate_signing_request=certificate_signing_request,
-                load_if_exists=load_if_exists,
-                save_if_needed=save_if_needed,
-                save_forced=save_forced,
-                save_chain=True
-            )
+            certificate = CertificateBuilder(changes_stack=self.changes_stack) \
+                .sign_csr(
+                    nickname=nickname,
+                    file=certificate_file,
+                    chain_file=certificate_chain_file,
+                    certificate_type=certificate_type,
+                    term=certificate_term,
+                    ca=self,
+                    subject=certificate_subject,
+                    alternative_names=certificate_alternative_names,
+                    extra_extensions=certificate_extensions,
+                    private_key=private_key,
+                    certificate_signing_request=certificate_signing_request,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced,
+                    save_chain=True
+                )
         else:
-            certificate = CertificateBuilder().init_with_llo(
-                nickname=nickname,
-                file=certificate_file,
-                chain_file=certificate_chain_file,
-                llo=certificate_llo,
-                save_if_needed=save_if_needed,
-                save_forced=save_forced,
-                save_chain=True
-            )
+            certificate = CertificateBuilder(changes_stack=self.changes_stack).init_with_llo(
+                    nickname=nickname,
+                    file=certificate_file,
+                    chain_file=certificate_chain_file,
+                    llo=certificate_llo,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced,
+                    save_chain=True
+                )
         CertificateBuilder._check_after_load(
             certificate,
             {

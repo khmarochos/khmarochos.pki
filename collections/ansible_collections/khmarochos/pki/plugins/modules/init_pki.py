@@ -16,8 +16,12 @@
 
 from ansible.module_utils.basic import AnsibleModule
 
-from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import PKICascadeError
-from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade import PKICascade
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker \
+    import ChangesStack
+from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions \
+    import PKICascadeError
+from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade \
+    import PKICascade
 
 
 ARGUMENT_SPEC = {
@@ -26,12 +30,18 @@ ARGUMENT_SPEC = {
 
 
 def main():
+
     module = AnsibleModule(argument_spec=ARGUMENT_SPEC)
+
+    changes_stack = ChangesStack()
 
     pki_cascade = None
 
     try:
-        pki_cascade = PKICascade(module.params['pki_ca_cascade'])
+        pki_cascade = PKICascade(
+            pki_cascade_configuration=module.params['pki_ca_cascade'],
+            changes_stack=changes_stack
+        )
     except Exception as e:
         module.fail_json(msg=f"Can't traverse the CA cascade: {e.__str__()}")
 
@@ -40,7 +50,10 @@ def main():
     except Exception as e:
         module.fail_json(msg=f"Can't set up the CA cascade: {e.__str__()}")
 
-    module.exit_json(changed=True, result=pki_cascade.pki_cascade_json())
+    module.exit_json(
+        changed=bool(len(changes_stack) > 0),
+        result=pki_cascade.pki_cascade_json()
+    )
 
 if __name__ == '__main__':
     main()

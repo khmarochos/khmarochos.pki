@@ -17,15 +17,16 @@ import logging
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 
 
-class CertificateBase(FlexiClass):
+class CertificateBase:
 
     def anatomize_llo(self):
 
-        BIG_NEGATIVE = -(2 ** 16)
+        BIG_NEGATIVE = -(2**32)
 
         if isinstance(self.llo, x509.Certificate):
             with self.ignore_readonly('term'):
@@ -35,11 +36,10 @@ class CertificateBase(FlexiClass):
                 self.ignore_readonly('certificate_type'), \
                 self.ignore_readonly('alternative_names'), \
                 self.ignore_readonly('extra_extensions'):
-            self.subject = None
-            self.certificate_type = None
+            self.subject = self.llo.subject
             self.alternative_names = None
             self.extra_extensions = None
-            self.subject = self.llo.subject
+            self.certificate_type = None
             certificate_type_candidates = {
                 CertificateTypes.CLIENT: 0,
                 CertificateTypes.SERVER: 0,
@@ -50,53 +50,51 @@ class CertificateBase(FlexiClass):
                 if extension.oid == x509.oid.ExtensionOID.BASIC_CONSTRAINTS:
                     if extension.value.ca:
                         if extension.value.path_length == 0:
+                            certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
+                            certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                             certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] -= 1
+                        else:
                             certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
-                        else:
                             certificate_type_candidates[CertificateTypes.CA_STUBBY] -= 1
                             certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
-                            certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
-                            certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
                 elif extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
-                    logging.debug(f"KEY_USAGE: {extension.value}")
                     if extension.value.digital_signature:
-                        certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
-                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
+                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.key_cert_sign:
-                        certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
-                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                         certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
+                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.crl_sign:
+                        certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
+                    if extension.value.key_agreement:
                         certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
-                    if extension.value.key_agreement:
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
-                        certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
-                        certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
                     if extension.value.key_encipherment:
-                        certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
-                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                     if extension.value.data_encipherment:
-                        certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
-                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                     # if extension.value.encipher_only:
                     #     pass    # ???
                     # if extension.value.encipher_only:
                     #     pass    # ???
                 elif extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
-                    logging.debug(f"EXTENDED_KEY_USAGE: {extension.value}")
                     if x509.oid.ExtendedKeyUsageOID.SERVER_AUTH in extension.value:
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE

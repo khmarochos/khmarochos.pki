@@ -24,13 +24,14 @@ class FlexiBuilder(FlexiClass):
 
         super().__init__(**kwargs)
 
+        self._changes_made = []
+
         for property_name, property_parameters in self._class_properties.items():
             if property_name != FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY and \
                     (add_builder_updater := property_parameters.get('add_builder_updater')):
                 self.__add_builder_updater(property_name, add_builder_updater)
 
     def __add_builder_updater(self, property_name: str, method_name: bool or str or None):
-
         def __builder_updater(myself, value):
             setattr(myself, property_name, value)
             return myself

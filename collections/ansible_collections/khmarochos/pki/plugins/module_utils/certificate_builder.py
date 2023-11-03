@@ -11,24 +11,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
+
 import os
-import warnings
-from typing import Union
 
 from cryptography import x509
 
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate import Certificate
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
-    CertificateSigningRequest
-from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes, Constants
-from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
-from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import FlexiBuilder
-from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate \
+    import Certificate
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request \
+    import CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
+from ansible_collections.khmarochos.pki.plugins.module_utils.private_key \
+    import PrivateKey
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import \
+    CertificateTypes, Constants
+from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base \
+    import CertificateBuilderBase
+from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import \
+    FlexiBuilder
+from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass \
+    import FlexiClass
 
 
-class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
+class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
         'mandatory': False,
@@ -156,6 +161,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             certificate.save()
             if save_chain:
                 certificate.save_chain()
+            self.changes_stack.push("Saved a certificate")
         return certificate
 
     def sign_instantly(
@@ -219,6 +225,7 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             certificate.save()
             if save_chain:
                 certificate.save_chain()
+            self.changes_stack.push("Saved a certificate")
         return certificate
 
     def sign_csr(
@@ -297,4 +304,5 @@ class CertificateBuilder(CertificateBuilderBase, FlexiBuilder, properties={
             certificate.save()
             if save_chain:
                 certificate.save_chain()
+            self.changes_stack.push("Saved a certificate")
         return certificate

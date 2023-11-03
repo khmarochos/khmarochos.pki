@@ -17,6 +17,7 @@ import os
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import FlexiBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
@@ -24,7 +25,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import 
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
 
-class PrivateKeyBuilder(FlexiBuilder, properties={
+class PrivateKeyBuilder(ChangeTracker, FlexiBuilder, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
         'mandatory': False,
@@ -138,6 +139,7 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
         file_exists = os.path.exists(parameters_assigned.get('file'))
         if save_forced or save_if_needed and not file_exists:
             private_key.save()
+            self.changes_stack.push("Saved a private key")
         return private_key
 
     def init_new(
@@ -182,4 +184,5 @@ class PrivateKeyBuilder(FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             private_key.save()
+            self.changes_stack.push("Saved a private key")
         return private_key

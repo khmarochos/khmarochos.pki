@@ -30,8 +30,29 @@
         pki_ca_cascade: "{{ pki_ca_cascade }}"
         ca_nickname: root
         certificate_parameters:
-          nickname: test
+          nickname: test-server
           certificate_type: server
           certificate_term: 365
           private_key_passphrase_random: true
           private_key_encrypted: true
+      register: certificate
+
+    - name: Show the certificate's information
+      debug:
+        msg: "{{ certificate.result }}"
+
+    - name: Issue a certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test-client
+          certificate_type: client
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true
+      register: certificate
+
+    - name: Show the certificate's information
+      debug:
+        msg: "{{ certificate.result }}"

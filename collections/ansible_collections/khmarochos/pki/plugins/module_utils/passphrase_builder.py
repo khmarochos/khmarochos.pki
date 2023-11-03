@@ -11,18 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-import logging
+
 import os
 import secrets
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import FlexiBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
 
-class PassphraseBuilder(FlexiBuilder, properties={
+class PassphraseBuilder(ChangeTracker, FlexiBuilder, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
         'mandatory': False,
@@ -105,6 +105,7 @@ class PassphraseBuilder(FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             passphrase.save()
+            self.changes_stack.push("Saved a passphrase")
         return passphrase
 
     def init_with_random(
@@ -146,4 +147,5 @@ class PassphraseBuilder(FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             passphrase.save()
+            self.changes_stack.push("Saved a passphrase")
         return passphrase

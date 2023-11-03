@@ -16,12 +16,13 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_base import CertificateBase
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 
 
-class CertificateSigningRequest(CertificateBase, FlexiClass, properties={
+class CertificateSigningRequest(ChangeTracker, CertificateBase, FlexiClass, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'mandatory': False,
         'default': None,

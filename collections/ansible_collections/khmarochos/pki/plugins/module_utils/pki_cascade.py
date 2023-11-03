@@ -15,12 +15,13 @@
 import json
 import logging
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_ca import PKICA
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import CANotFound, StructureError
 
 
-class PKICascade(FlexiClass, properties={
+class PKICascade(ChangeTracker, FlexiClass, properties={
     'pki_cascade_configuration': {
         'mandatory': True,
         'default': None,
@@ -38,7 +39,6 @@ class PKICascade(FlexiClass, properties={
 
     def __init__(self, pki_cascade_configuration: dict = None, **kwargs):
         super().__init__(pki_cascade_configuration=pki_cascade_configuration, **kwargs)
-        # self.pki_cascade = {}
         logging.debug(f"PKICascade.__init__(): pki_cascade_configuration = {pki_cascade_configuration}")
         self.traverse_cascade(
             branch=pki_cascade_configuration,
@@ -71,6 +71,7 @@ class PKICascade(FlexiClass, properties={
             logging.debug(f"PKICascade.traverse_cascade(): parent_nickname = {parent_nickname}")
             logging.debug(f"PKICascade.traverse_cascade(): parameters = {parameters}")
             pki_ca = PKICA(
+                changes_stack=self.changes_stack,
                 nickname=nickname,
                 parent=self.get_ca(parent_nickname, loose=True),
                 **parameters

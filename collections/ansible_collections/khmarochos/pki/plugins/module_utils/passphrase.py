@@ -14,10 +14,11 @@
 
 import logging
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 
 
-class Passphrase(FlexiClass, properties={
+class Passphrase(ChangeTracker, FlexiClass, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {'mandatory': False, 'readonly': True},
     'value': {'type': str},
     'file': {'type': str, 'mandatory': True},

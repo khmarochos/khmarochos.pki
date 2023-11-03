@@ -15,12 +15,13 @@
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 from ansible_collections.khmarochos.pki.plugins.module_utils.passphrase import Passphrase
 
 
-class PrivateKey(FlexiClass, properties={
+class PrivateKey(ChangeTracker, FlexiClass, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
         'mandatory': False,

@@ -11,13 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-import logging
+
 import sys
 import re
 from contextlib import contextmanager
 from enum import Enum
-from types import MethodType
 from typing import Union
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions import \
@@ -138,7 +136,10 @@ class FlexiClass:
             except UnknownProperty:
                 pass
 
-    def __init_subclass__(cls, properties: dict = {}, **kwargs):
+    def __init_subclass__(cls, properties: dict = None, **kwargs):
+
+        if properties is None:
+            properties = {}
 
         # Define the default property settings for the new class
         cls.DEFAULT_PROPERTY_SETTINGS = FlexiClass.DEFAULT_PROPERTY_SETTINGS.copy()

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import datetime
-import logging
 from typing import Union
 
 from cryptography import x509

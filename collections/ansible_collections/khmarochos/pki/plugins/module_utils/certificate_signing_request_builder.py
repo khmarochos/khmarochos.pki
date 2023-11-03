@@ -18,6 +18,7 @@ from cryptography import x509
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request import \
     CertificateSigningRequest
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
@@ -25,7 +26,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 
 
-class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, properties={
+class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'type': str,
         'mandatory': False,
@@ -101,6 +102,7 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
         CertificateSigningRequestBuilder._check_after_load(certificate_signing_request, parameters_assigned)
         if save:
             certificate_signing_request.save()
+            self.changes_stack.push("Saved a certificate signing request")
         return certificate_signing_request
 
     def init_new(
@@ -154,4 +156,5 @@ class CertificateSigningRequestBuilder(CertificateBuilderBase, FlexiBuilder, pro
             generated = True
         if save_forced or (save_if_needed and generated):
             certificate_signing_request.save()
+            self.changes_stack.push("Saved a certificate signing request")
         return certificate_signing_request

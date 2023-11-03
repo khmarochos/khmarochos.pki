@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives import hashes
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_base \
     import CertificateBase
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants \
     import CertificateTypes
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass \
@@ -28,7 +29,7 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.private_key \
     import PrivateKey
 
 
-class Certificate(CertificateBase, FlexiClass, properties={
+class Certificate(ChangeTracker, CertificateBase, FlexiClass, properties={
     FlexiClass.DEFAULT_PROPERTY_SETTINGS_KEY: {
         'mandatory': False,
         'default': None,
