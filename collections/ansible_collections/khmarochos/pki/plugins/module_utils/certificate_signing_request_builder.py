@@ -66,6 +66,13 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
             parameters_to_check=['certificate_type', 'subject', 'private_key', 'alternative_names', 'extra_extensions'],
             raise_exception=raise_exception
         )
+        if certificate_signing_request.llo.public_key() != certificate_signing_request.private_key.llo.public_key():
+            if raise_exception:
+                raise RuntimeError(
+                    f"The private key of the {certificate_signing_request.nickname} certificate signing request "
+                    "differs from the public key of the private key assigned to it")
+            else:
+                result = False
         return result
 
     def init_with_file(

@@ -20,7 +20,8 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.certificate \
     import Certificate
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing_request \
     import CertificateSigningRequest
-from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
+from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker \
+    import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key \
     import PrivateKey
 from ansible_collections.khmarochos.pki.plugins.module_utils.constants import \
@@ -117,6 +118,14 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
                                  'extra_extensions'],
             raise_exception=raise_exception
         )
+        if certificate.llo.public_key() != certificate.private_key.llo.public_key():
+            if raise_exception:
+                raise RuntimeError(
+                    f"The private key of the {certificate.nickname} certificate "
+                    "differs from the public key of the private key assigned to it"
+                )
+            else:
+                result = False
         return result
 
     def init_with_file(
