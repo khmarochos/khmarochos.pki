@@ -170,7 +170,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             certificate.save()
             if save_chain:
                 certificate.save_chain()
-            self.changes_stack.push("Saved a certificate")
+            self.changes_stack.state("Saved a certificate")
         return certificate
 
     def sign_instantly(
@@ -234,7 +234,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             certificate.save()
             if save_chain:
                 certificate.save_chain()
-            self.changes_stack.push("Saved a certificate")
+            self.changes_stack.state("Saved a certificate")
         return certificate
 
     def sign_csr(
@@ -313,5 +313,5 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             certificate.save()
             if save_chain:
                 certificate.save_chain()
-            self.changes_stack.push("Saved a certificate")
+            self.changes_stack.state("Saved a certificate")
         return certificate

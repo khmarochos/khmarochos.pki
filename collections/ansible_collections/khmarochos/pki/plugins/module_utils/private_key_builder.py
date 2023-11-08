@@ -139,7 +139,7 @@ class PrivateKeyBuilder(ChangeTracker, FlexiBuilder, properties={
         file_exists = os.path.exists(parameters_assigned.get('file'))
         if save_forced or save_if_needed and not file_exists:
             private_key.save()
-            self.changes_stack.push("Saved a private key")
+            self.changes_stack.state("Saved a private key")
         return private_key
 
     def init_new(
@@ -184,5 +184,5 @@ class PrivateKeyBuilder(ChangeTracker, FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             private_key.save()
-            self.changes_stack.push("Saved a private key")
+            self.changes_stack.state("Saved a private key")
         return private_key

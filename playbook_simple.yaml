@@ -10,7 +10,7 @@
 
     - name: Initialise the configuration dictionary
       khmarochos.pki.init_dictionary:
-        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
       register: configuration_dictionary
 
     - name: Retrieve the calculations' result
@@ -21,13 +21,17 @@
       debug:
         msg: "{{ configuration_dictionary }}"
 
+    - name: Look up something
+      debug:
+        msg: "{{ lookup('khmarochos.pki.pki_dictionary', ca='root', parameter='certificate_chain_file') }}"
+
     - name: Initialise the PKI cascade
       khmarochos.pki.init_pki:
-        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
 
     - name: Issue a certificate
       khmarochos.pki.issue_everything:
-        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
         ca_nickname: root
         certificate_parameters:
           nickname: test-server
@@ -43,7 +47,7 @@
 
     - name: Issue a certificate
       khmarochos.pki.issue_everything:
-        pki_ca_cascade: "{{ pki_ca_cascade }}"
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
         ca_nickname: root
         certificate_parameters:
           nickname: test-client

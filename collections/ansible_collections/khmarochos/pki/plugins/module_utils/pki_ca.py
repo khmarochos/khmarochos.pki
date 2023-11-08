@@ -247,7 +247,7 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                     raise Exception(f"Path '{directory}' exists but has wrong permissions")
             else:
                 os.makedirs(directory, mode=mode)
-                self.changes_stack.push(f"Directory '{directory}' created")
+                self.changes_stack.state(f"Directory '{directory}' created")
 
     def issue(
             self,

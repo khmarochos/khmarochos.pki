@@ -102,7 +102,10 @@ class PKICascade(ChangeTracker, FlexiClass, properties={
             raise CANotFound(f"There is no such CA as {nickname}")
 
     def pki_cascade_json(self, pretty: bool = False) -> str:
+        return json.dumps(self.pki_cascade_dictionary(), sort_keys=True, indent=4 if pretty else None)
+
+    def pki_cascade_dictionary(self) -> dict:
         result = {}
         for nickname, pki_ca in self.pki_cascade.items():
             result[nickname] = pki_ca.get_properties(builtins_only=True)
-        return json.dumps(result, sort_keys=True, indent=4 if pretty else None)
+        return result

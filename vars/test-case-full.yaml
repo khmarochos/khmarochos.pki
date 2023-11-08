@@ -1,6 +1,7 @@
-pki_ca_cascade:
+pki_global_root_directory: "/tmp/pki"
+pki_cascade_configuration:
   __propagated:
-    global_root_directory: "/tmp/pki"
+    global_root_directory: "{{ pki_global_root_directory }}"
     domain: "k0.z0.r0.infra.d.kloudster.net"
     certificate_subject_country_name: PL
     certificate_subject_state_or_province_name: Malopolskie

@@ -105,7 +105,7 @@ class PassphraseBuilder(ChangeTracker, FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             passphrase.save()
-            self.changes_stack.push("Saved a passphrase")
+            self.changes_stack.state("Saved a passphrase")
         return passphrase
 
     def init_with_random(
@@ -147,5 +147,5 @@ class PassphraseBuilder(ChangeTracker, FlexiBuilder, properties={
             generated = True
         if save_forced or (save_if_needed and generated):
             passphrase.save()
-            self.changes_stack.push("Saved a passphrase")
+            self.changes_stack.state("Saved a passphrase")
         return passphrase

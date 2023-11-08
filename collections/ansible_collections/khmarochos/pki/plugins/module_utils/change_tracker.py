@@ -13,40 +13,44 @@
 # limitations under the License.
 
 import datetime
-import traceback
+import inspect
+from typing import Union
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
 
 
 class Change(FlexiClass, properties={
     'time': {'mandatory': False, 'default': None, 'readonly': True, 'type': datetime.datetime},
-    'traceback': {'mandatory': False, 'default': None, 'readonly': True, 'type': traceback},
+    'traceback': {'mandatory': False, 'default': None, 'readonly': True, 'type': list},
     'comment': {'mandatory': False, 'default': None, 'readonly': True, 'type': str}
 }):
 
     def __init__(self, **kwargs):
-
-        super().__init__()
-
+        super().__init__(**kwargs)
         if kwargs.get('time') is None:
-            self.time = datetime.datetime.now()
+            with self.ignore_readonly('time'):
+                self.time = datetime.datetime.now()
         if kwargs.get('traceback') is None:
-            self.traceback = traceback
+            with self.ignore_readonly('traceback'):
+                self.traceback = inspect.stack()[1:]
 
 
 class ChangesStack:
 
     def __init__(self):
-        self._changes_stack = []
+        self._changes_stack: list[Change] = []
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._changes_stack)
 
-    def push(self, change: Change):
+    def state(self, change: Union[Change, str]) -> Change:
+        if type(change) is str:
+            change = Change(comment=change)
         self._changes_stack.append(change)
+        return change
 
-    def pop(self) -> Change:
-        return self._changes_stack.pop()
+    def list(self) -> list[Change]:
+        return self._changes_stack
 
 
 class ChangeTracker:
@@ -58,12 +62,9 @@ class ChangeTracker:
                 self.changes_stack = ChangesStack()
 
     def __init_subclass__(cls, **kwargs):
-
         if kwargs.get('properties') is None:
             kwargs['properties'] = {}
-
         kwargs.get('properties').update({
             'changes_stack': {'mandatory': False, 'default': None, 'readonly': True, 'type': ChangesStack}
         })
-
         super().__init_subclass__(**kwargs)

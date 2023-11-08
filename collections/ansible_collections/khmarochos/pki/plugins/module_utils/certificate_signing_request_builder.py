@@ -109,7 +109,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
         CertificateSigningRequestBuilder._check_after_load(certificate_signing_request, parameters_assigned)
         if save:
             certificate_signing_request.save()
-            self.changes_stack.push("Saved a certificate signing request")
+            self.changes_stack.state("Saved a certificate signing request")
         return certificate_signing_request
 
     def init_new(
@@ -163,5 +163,5 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
             generated = True
         if save_forced or (save_if_needed and generated):
             certificate_signing_request.save()
-            self.changes_stack.push("Saved a certificate signing request")
+            self.changes_stack.state("Saved a certificate signing request")
         return certificate_signing_request
