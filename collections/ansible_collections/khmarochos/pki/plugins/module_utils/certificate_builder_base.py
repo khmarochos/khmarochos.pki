@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import ipaddress
 import re
 from typing import Union
 
@@ -136,7 +137,18 @@ class CertificateBuilderBase:
                     adapted_subject_alternative_names.append(x509.UniformResourceIdentifier(match.group(1)))
                 elif (match := CertificateBuilderBase.REGEX_SUBJECT_ALTERNATIVE_NAMES_IP.match(subject_alternative_name)) \
                         is not None:
-                    adapted_subject_alternative_names.append(x509.IPAddress(match.group(1)))
+                    ip_address_or_network = match.group(1)
+                    if ip_address_or_network.find(':') >= 0:
+                        if ip_address_or_network.find('/') >= 0:
+                            ip_address_or_network = ipaddress.IPv6Network(ip_address_or_network)
+                        else:
+                            ip_address_or_network = ipaddress.IPv6Address(ip_address_or_network)
+                    else:
+                        if ip_address_or_network.find('/') >= 0:
+                            ip_address_or_network = ipaddress.IPv4Network(ip_address_or_network)
+                        else:
+                            ip_address_or_network = ipaddress.IPv4Address(ip_address_or_network)
+                    adapted_subject_alternative_names.append(x509.IPAddress(ip_address_or_network))
                 else:
                     raise ValueError(f"Unknown type of the subject alternative name: {subject_alternative_name}")
             builder = builder.add_extension(x509.SubjectAlternativeName(adapted_subject_alternative_names), False)
