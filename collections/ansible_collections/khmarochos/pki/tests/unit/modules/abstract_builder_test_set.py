@@ -57,7 +57,7 @@ DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATION_NAME = 'TUCHA SPOLKA Z OGRANICZONA ODPO
 DEFAULT_CERTIFICATE_SUBJECT_ORGANIZATIONAL_UNIT_NAME = 'Security Service'
 DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS = f'security@{DOMAIN_NAME}'
 DEFAULT_CERTIFICATE_SUBJECT_COMMON_NAME = f'security.{DOMAIN_NAME}'
-DEFAULT_CERTIFICATE_ALTERNATIVE_NAMES_NUMBER = 5
+DEFAULT_CERTIFICATE_SUBJECT_ALTERNATIVE_NAMES_NUMBER = 5
 RANDOM_STRING_MIN_LENGTH = 16
 RANDOM_STRING_MAX_LENGTH = 32
 RANDOM_STRING_CHARSET = ''.join([chr(i) for i in range(0x21, 0x7F)])
@@ -188,7 +188,7 @@ class Randomizer(FlexiClass, properties={
     ) -> int:
         return self._random_number(min_term, max_term, disallowed=[Constants.DEFAULT_CERTIFICATE_TERM])
 
-    def randomize_certificate_alternative_names_number(
+    def randomize_certificate_subject_alternative_names_number(
             self,
             min_number: int = 1,
             max_number: int = 5
@@ -267,8 +267,8 @@ class TestingSet(FlexiClass, properties={
     'certificate_term': {'type': Union[int, Randomizer]},
     'certificate_subject': {'type': x509.name.Name},
     'certificate_subject_common_name': {'type': Union[str, Randomizer]},
-    'certificate_alternative_names': {'type': Union[list, Randomizer]},
-    'certificate_alternative_names_number': {'type': Union[int, Randomizer]},
+    'certificate_subject_alternative_names': {'type': Union[list, Randomizer]},
+    'certificate_subject_alternative_names_number': {'type': Union[int, Randomizer]},
     'certificate_extra_extensions': {'type': list},
     'certificate_issuer_private_key': {'type': PrivateKey},
     'certificate_issuer_subject': {'type': x509.name.Name},
@@ -382,19 +382,29 @@ class TestingSet(FlexiClass, properties={
                         x509.NameAttribute(x509.oid.NameOID.EMAIL_ADDRESS, DEFAULT_CERTIFICATE_SUBJECT_EMAIL_ADDRESS),
                         x509.NameAttribute(x509.oid.NameOID.COMMON_NAME, self.nickname + '.' + DOMAIN_NAME),
                     ])
-            # ...certificate_alternative_names
-            if isinstance(self.certificate_alternative_names_number, Randomizer):
-                with self.ignore_readonly('certificate_alternative_names_number'):
-                    self.certificate_alternative_names_number = self.certificate_alternative_names_number.randomize_certificate_alternative_names_number()
-            if self.certificate_alternative_names_number is None:
-                with self.ignore_readonly('certificate_alternative_names_number'):
-                    self.certificate_alternative_names_number = DEFAULT_CERTIFICATE_ALTERNATIVE_NAMES_NUMBER
-            if isinstance(self.certificate_alternative_names, Randomizer):
-                certificate_alternative_names = []
-                for _ in range(0, self.certificate_alternative_names_number):
-                    certificate_alternative_names.append(self.certificate_alternative_names.randomize_certificate_subject_common_name())
-                with self.ignore_readonly('certificate_alternative_names'):
-                    self.certificate_alternative_names = certificate_alternative_names
+            # ...certificate_subject_alternative_names
+            if isinstance(self.certificate_subject_alternative_names_number, Randomizer):
+                with self.ignore_readonly('certificate_subject_alternative_names_number'):
+                    self.certificate_subject_alternative_names_number = (
+                        self
+                        .certificate_subject_alternative_names_number
+                        .randomize_certificate_subject_alternative_names_number()
+                    )
+            if self.certificate_subject_alternative_names_number is None:
+                with self.ignore_readonly('certificate_subject_alternative_names_number'):
+                    self.certificate_subject_alternative_names_number = \
+                        DEFAULT_CERTIFICATE_SUBJECT_ALTERNATIVE_NAMES_NUMBER
+            if isinstance(self.certificate_subject_alternative_names, Randomizer):
+                certificate_subject_alternative_names = []
+                for _ in range(0, self.certificate_subject_alternative_names_number):
+                    certificate_subject_alternative_names.append(
+                        'DNS:' +
+                        self
+                        .certificate_subject_alternative_names
+                        .randomize_certificate_subject_common_name()
+                    )
+                with self.ignore_readonly('certificate_subject_alternative_names'):
+                    self.certificate_subject_alternative_names = certificate_subject_alternative_names
 
         if self.stop_after.value >= StopAfter.CERTIFICATE.value:
             # The certificate-related parameters
@@ -481,8 +491,8 @@ class TestingSet(FlexiClass, properties={
                 certificate_signing_request_builder.add_private_key(self.private_key)
             if self.certificate_subject is not None:
                 certificate_signing_request_builder.add_subject(self.certificate_subject)
-            if self.certificate_alternative_names is not None:
-                certificate_signing_request_builder.add_alternative_names(self.certificate_alternative_names)
+            if self.certificate_subject_alternative_names is not None:
+                certificate_signing_request_builder.add_subject_alternative_names(self.certificate_subject_alternative_names)
             if self.certificate_extra_extensions is not None:
                 certificate_signing_request_builder.add_extra_extensions(self.certificate_extra_extensions)
             with self.ignore_readonly('certificate_signing_request'):

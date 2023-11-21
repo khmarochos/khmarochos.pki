@@ -23,7 +23,6 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import F
 
 
 class CertificateBase:
-
     def anatomize_llo(self):
 
         BIG_NEGATIVE = -(2**32)
@@ -34,10 +33,10 @@ class CertificateBase:
         with \
                 self.ignore_readonly('subject'), \
                 self.ignore_readonly('certificate_type'), \
-                self.ignore_readonly('alternative_names'), \
+                self.ignore_readonly('subject_alternative_names'), \
                 self.ignore_readonly('extra_extensions'):
             self.subject = self.llo.subject
-            self.alternative_names = None
+            self.subject_alternative_names = None
             self.extra_extensions = None
             self.certificate_type = None
             certificate_type_candidates = {
@@ -106,11 +105,17 @@ class CertificateBase:
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
                 elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
-                    for alternative_name in extension.value:
-                        if isinstance(alternative_name, x509.DNSName):
-                            if self.alternative_names is None:
-                                self.alternative_names = []
-                            self.alternative_names.append(alternative_name.value)
+                    if self.subject_alternative_names is None:
+                        self.subject_alternative_names = []
+                    for subject_alternative_name in extension.value:
+                        if isinstance(subject_alternative_name, x509.general_name.DNSName):
+                            self.subject_alternative_names.append('DNS:' + subject_alternative_name.value)
+                        elif isinstance(subject_alternative_name, x509.general_name.UniformResourceIdentifier):
+                            self.subject_alternative_names.append('URI:' + subject_alternative_name.value)
+                        elif isinstance(subject_alternative_name, x509.general_name.IPAddress):
+                            self.subject_alternative_names.append('IP:' + subject_alternative_name.value.__str__())
+                        else:
+                            raise RuntimeError(f"Unknown subject alternative name type: {type(subject_alternative_name)}")
                 elif extension.oid == x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER:
                     pass
                 elif extension.oid == x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER:

@@ -1,0 +1,18 @@
+---
+
+- name: Install the required packages
+  include_tasks: packages.yml
+  when: not (skip_packages | default(false))
+
+- name: Set up the PKI cascade
+  khmarochos.pki.init_pki:
+    pki_ca_cascade: "{{ pki_cascade_configuration }}"
+  register: pki_cascade
+
+- name: Retrieve the PKI cascade state
+  set_fact:
+    pki_cascade: "{{ pki_cascade.result }}"
+
+- name: Show the PKI cascade state
+  debug:
+    msg: "{{ pki_cascade }}"

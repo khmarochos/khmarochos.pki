@@ -40,7 +40,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
     'file': {},
     'certificate_type': {'type': CertificateTypes, 'default': CertificateTypes.CLIENT},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list},
+    'subject_alternative_names': {'type': list},
     'extra_extensions': {'type': list},
     'private_key': {'type': PrivateKey}
 }):
@@ -63,7 +63,8 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
         result = FlexiBuilder.check_after_load_universal(
             object_to_check=certificate_signing_request,
             parameters_assigned=parameters_assigned,
-            parameters_to_check=['certificate_type', 'subject', 'private_key', 'alternative_names', 'extra_extensions'],
+            parameters_to_check=['certificate_type', 'subject', 'private_key', 'subject_alternative_names',
+                                 'extra_extensions'],
             raise_exception=raise_exception
         )
         if certificate_signing_request.llo.public_key() != certificate_signing_request.private_key.llo.public_key():
@@ -119,7 +120,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
             private_key: PrivateKey = None,
             certificate_type: CertificateTypes = None,
             subject: x509.name.Name = None,
-            alternative_names: list = None,
+            subject_alternative_names: list = None,
             extra_extensions: list = None,
             load_if_exists: bool = False,
             save_if_needed: bool = True,
@@ -131,7 +132,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
             'private_key': {'mandatory': True},
             'certificate_type': {'mandatory': True},
             'subject': {'mandatory': True},
-            'alternative_names': {},
+            'subject_alternative_names': {},
             'extra_extensions': {},
         })
         generated = False
@@ -156,7 +157,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
                     private_key=parameters_assigned.get('private_key'),
                     certificate_type=parameters_assigned.get('certificate_type'),
                     subject=parameters_assigned.get('subject'),
-                    alternative_names=parameters_assigned.get('alternative_names'),
+                    subject_alternative_names=parameters_assigned.get('subject_alternative_names'),
                     extra_extensions=parameters_assigned.get('extra_extensions')
                 ),
             )

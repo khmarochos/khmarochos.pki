@@ -111,7 +111,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             issuer_subject: BuilderCheckList[x509.name.Name],
             private_key: BuilderCheckList[PrivateKey],
             subject: BuilderCheckList[x509.name.Name],
-            alternative_names: BuilderCheckList[list],
+            subject_alternative_names: BuilderCheckList[list],
             extra_extensions: BuilderCheckList[list],
             certificate_signing_request: BuilderCheckList[CertificateSigningRequest],
     ):
@@ -128,7 +128,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             issuer_subject=issuer_subject,
             private_key=private_key,
             subject=subject,
-            alternative_names=alternative_names,
+            subject_alternative_names=subject_alternative_names,
             extra_extensions=extra_extensions,
             certificate_signing_request=certificate_signing_request,
         )
@@ -147,7 +147,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             issuer_subject: BuilderCheckList[x509.name.Name],
             private_key: BuilderCheckList[PrivateKey],
             subject: BuilderCheckList[x509.name.Name],
-            alternative_names: BuilderCheckList[list],
+            subject_alternative_names: BuilderCheckList[list],
             extra_extensions: BuilderCheckList[list],
     ):
         self._test_object(
@@ -163,7 +163,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             issuer_subject=issuer_subject,
             private_key=private_key,
             subject=subject,
-            alternative_names=alternative_names,
+            subject_alternative_names=subject_alternative_names,
             extra_extensions=extra_extensions,
         )
 
@@ -188,7 +188,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Root CA',
-                certificate_alternative_names=None,
+                certificate_subject_alternative_names=None,
                 certificate_extra_extensions=None,
             )
             certificate_ca_root = CertificateBuilder(
@@ -218,7 +218,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 issuer_subject=testset_ca_root.certificate_subject,
                 private_key=testset_ca_root.private_key,
                 subject=testset_ca_root.certificate_subject,
-                alternative_names=[testset_ca_root.certificate_alternative_names],
+                subject_alternative_names=[testset_ca_root.certificate_subject_alternative_names],
                 extra_extensions=[testset_ca_root.certificate_extra_extensions],
             )
             trusted_certificates.append(certificate_ca_root)
@@ -236,7 +236,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Intermediate CA (the 1st level)',
-                certificate_alternative_names=None,
+                certificate_subject_alternative_names=None,
                 certificate_extra_extensions=None,
             )
             certificate_ca_intermediate_1 = CertificateBuilder(
@@ -268,7 +268,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 issuer_subject=testset_ca_root.certificate_subject,
                 private_key=testset_ca_intermediate_1.private_key,
                 subject=testset_ca_intermediate_1.certificate_subject,
-                alternative_names=[testset_ca_intermediate_1.certificate_alternative_names],
+                subject_alternative_names=[testset_ca_intermediate_1.certificate_subject_alternative_names],
                 extra_extensions=[testset_ca_intermediate_1.certificate_extra_extensions],
             )
             trusted_certificates.append(certificate_ca_intermediate_1)
@@ -285,7 +285,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 certificate_type=CertificateTypes.CA_INTERMEDIATE,
                 certificate_term=randomizer,
                 certificate_subject_common_name='Intermediate CA (the 2nd level)',
-                certificate_alternative_names=None,
+                certificate_subject_alternative_names=None,
                 certificate_extra_extensions=None,
             )
             certificate_ca_intermediate_2 = CertificateBuilder(
@@ -317,7 +317,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 issuer_subject=testset_ca_intermediate_1.certificate_subject,
                 private_key=testset_ca_intermediate_2.private_key,
                 subject=testset_ca_intermediate_2.certificate_subject,
-                alternative_names=[testset_ca_intermediate_2.certificate_alternative_names],
+                subject_alternative_names=[testset_ca_intermediate_2.certificate_subject_alternative_names],
                 extra_extensions=[testset_ca_intermediate_2.certificate_extra_extensions],
             )
             trusted_certificates.append(certificate_ca_intermediate_2)
@@ -345,8 +345,8 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         if tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFINED:
             provided_to_testset['certificate_term'] = randomizer
             provided_to_testset['certificate_subject_common_name'] = randomizer
-            provided_to_testset['certificate_alternative_names_number'] = randomizer
-            provided_to_testset['certificate_alternative_names'] = randomizer
+            provided_to_testset['certificate_subject_alternative_names_number'] = randomizer
+            provided_to_testset['certificate_subject_alternative_names'] = randomizer
             provided_to_testset['certificate_extra_extensions'] = None
         elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             pass
@@ -394,17 +394,17 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             provided_to_builder['term'] = testset.certificate_term
             expected_in_builder['term'] = testset.certificate_term
             expected_in_outcome['term'] = testset.certificate_term
-            provided_to_builder['alternative_names'] = testset.certificate_alternative_names
-            expected_in_builder['alternative_names'] = testset.certificate_alternative_names
-            expected_in_outcome['alternative_names'] = testset.certificate_alternative_names
+            provided_to_builder['subject_alternative_names'] = testset.certificate_subject_alternative_names
+            expected_in_builder['subject_alternative_names'] = testset.certificate_subject_alternative_names
+            expected_in_outcome['subject_alternative_names'] = testset.certificate_subject_alternative_names
             provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_outcome['extra_extensions'] = testset.certificate_extra_extensions
         elif tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFAULT:
             expected_in_builder['term'] = None
             expected_in_outcome['term'] = Constants.DEFAULT_CERTIFICATE_TERM
-            expected_in_builder['alternative_names'] = (TT.NONE,)
-            expected_in_outcome['alternative_names'] = (TT.NONE,)
+            expected_in_builder['subject_alternative_names'] = (TT.NONE,)
+            expected_in_outcome['subject_alternative_names'] = (TT.NONE,)
             expected_in_builder['extra_extensions'] = (TT.NONE,)
             expected_in_outcome['extra_extensions'] = (TT.NONE,)
         else:
@@ -414,7 +414,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
             expected_in_builder['certificate_signing_request'] = testset.certificate_signing_request
         elif tp_request == TestCertificateBuilder.TPSigningRequest.INSTANT:
             provided_to_builder['subject'] = testset.certificate_subject
-            provided_to_builder['alternative_names'] = testset.certificate_alternative_names
+            provided_to_builder['subject_alternative_names'] = testset.certificate_subject_alternative_names
             provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_builder['certificate_signing_request'] = None
         else:
@@ -491,7 +491,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     issuer_subject=expected_in_builder['issuer_subject'],
                     private_key=expected_in_builder['private_key'],
                     subject=expected_in_builder['subject'],
-                    alternative_names=[expected_in_builder['alternative_names']],
+                    subject_alternative_names=[expected_in_builder['subject_alternative_names']],
                     extra_extensions=[expected_in_builder['extra_extensions']],
                     certificate_signing_request=expected_in_builder['certificate_signing_request'],
                 )
@@ -509,7 +509,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                     issuer_subject=(TT.NONE,),
                     private_key=(TT.NONE,),
                     subject=(TT.NONE,),
-                    alternative_names=(TT.NONE,),
+                    subject_alternative_names=(TT.NONE,),
                     extra_extensions=(TT.NONE,),
                     certificate_signing_request=(TT.NONE,),
                 )
@@ -605,7 +605,11 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 file=expected_in_outcome['file'],
                 chain_file=(
                     expected_in_outcome['chain_file']
-                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        if tp_init in (
+                            TestCertificateBuilder.TPInit.NEW,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS_BUT_INCONSISTENT,
+                        )
                         else (TT.NONE,)
                 ),
                 certificate_type=expected_in_outcome['certificate_type'],
@@ -615,17 +619,25 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
                 # the certificate is being issued (not loaded)
                 issuer_private_key=(
                     expected_in_outcome['issuer_private_key']
-                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        if tp_init in (
+                            TestCertificateBuilder.TPInit.NEW,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS_BUT_INCONSISTENT,
+                        )
                         else (TT.NONE,)
                 ),
                 issuer_subject=(
                     expected_in_outcome['issuer_subject']
-                        if tp_init == TestCertificateBuilder.TPInit.NEW
+                        if tp_init in (
+                            TestCertificateBuilder.TPInit.NEW,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS,
+                            TestCertificateBuilder.TPInit.NEW_WHEN_EXISTS_BUT_INCONSISTENT,
+                        )
                         else (TT.NONE,)
                 ),
                 private_key=expected_in_outcome['private_key'],
                 subject=expected_in_outcome['subject'],
-                alternative_names=[expected_in_outcome['alternative_names']],
+                subject_alternative_names=[expected_in_outcome['subject_alternative_names']],
                 extra_extensions=[expected_in_outcome['extra_extensions']],
             )
 

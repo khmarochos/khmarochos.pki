@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import datetime
+import re
 from typing import Union
 
 from cryptography import x509
@@ -23,6 +24,10 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import 
 
 
 class CertificateBuilderBase:
+
+    REGEX_SUBJECT_ALTERNATIVE_NAMES_DNS = re.compile(r'^DNS:(.+)$', re.IGNORECASE)
+    REGEX_SUBJECT_ALTERNATIVE_NAMES_URI = re.compile(r'^URI:(.+)$', re.IGNORECASE)
+    REGEX_SUBJECT_ALTERNATIVE_NAMES_IP = re.compile(r'^IP:(.+)$', re.IGNORECASE)
 
     @staticmethod
     def compose_subject(**kwargs) -> x509.name.Name:
@@ -45,7 +50,7 @@ class CertificateBuilderBase:
             private_key: PrivateKey,
             certificate_type: CertificateTypes,
             subject: x509.name.Name,
-            alternative_names: list = None,
+            subject_alternative_names: list = None,
             extra_extensions: list = None,
             not_valid_before: datetime.datetime = None,
             not_valid_after: datetime.datetime = None,
@@ -120,11 +125,21 @@ class CertificateBuilderBase:
             x509.SubjectKeyIdentifier.from_public_key(private_key.llo.public_key()),
             False
         )
-        if alternative_names is not None and len(alternative_names) > 0:
-            builder = builder.add_extension(
-                x509.SubjectAlternativeName([x509.DNSName(alternative_name) for alternative_name in alternative_names]),
-                False
-            )
+        if subject_alternative_names is not None and len(subject_alternative_names) > 0:
+            adapted_subject_alternative_names = []
+            for subject_alternative_name in subject_alternative_names:
+                if (match := CertificateBuilderBase.REGEX_SUBJECT_ALTERNATIVE_NAMES_DNS.match(subject_alternative_name)) \
+                        is not None:
+                    adapted_subject_alternative_names.append(x509.DNSName(match.group(1)))
+                elif (match := CertificateBuilderBase.REGEX_SUBJECT_ALTERNATIVE_NAMES_URI.match(subject_alternative_name)) \
+                        is not None:
+                    adapted_subject_alternative_names.append(x509.UniformResourceIdentifier(match.group(1)))
+                elif (match := CertificateBuilderBase.REGEX_SUBJECT_ALTERNATIVE_NAMES_IP.match(subject_alternative_name)) \
+                        is not None:
+                    adapted_subject_alternative_names.append(x509.IPAddress(match.group(1)))
+                else:
+                    raise ValueError(f"Unknown type of the subject alternative name: {subject_alternative_name}")
+            builder = builder.add_extension(x509.SubjectAlternativeName(adapted_subject_alternative_names), False)
         if extra_extensions is not None and len(extra_extensions) > 0:
             for extension_to_add in extra_extensions:
                 builder = builder.add_extension(

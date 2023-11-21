@@ -67,9 +67,6 @@ class PKICascade(ChangeTracker, FlexiClass, properties={
             parameters.update(branch[PKICascade.PARAMETERS_KEY])
         # If this branch contains parameters of some CA, add the CA to the cascade
         if nickname is not None:
-            logging.debug(f"PKICascade.traverse_cascade(): nickname = {nickname}")
-            logging.debug(f"PKICascade.traverse_cascade(): parent_nickname = {parent_nickname}")
-            logging.debug(f"PKICascade.traverse_cascade(): parameters = {parameters}")
             pki_ca = PKICA(
                 changes_stack=self.changes_stack,
                 nickname=nickname,
@@ -87,9 +84,18 @@ class PKICascade(ChangeTracker, FlexiClass, properties={
                     parameters=parameters_propagated
                 )
 
-    def setup(self) -> None:
+    def setup(
+            self,
+            load_if_exists: bool = True,
+            save_if_needed: bool = True,
+            save_forced: bool = False
+    ) -> None:
         for pki_ca in self.pki_cascade.values():
-            pki_ca.setup()
+            pki_ca.setup(
+                load_if_exists=load_if_exists,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced
+            )
 
     def add_ca(self, pki_ca: PKICA) -> None:
         self.pki_cascade.update({pki_ca.nickname: pki_ca})

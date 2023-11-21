@@ -47,7 +47,7 @@ class Certificate(ChangeTracker, CertificateBase, FlexiClass, properties={
     'issuer_private_key': {'type': PrivateKey},
     'issuer_subject': {'type': x509.name.Name},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list},
+    'subject_alternative_names': {'type': list},
     'extra_extensions': {'type': list},
     'private_key': {'type': PrivateKey},
 }):
@@ -78,10 +78,11 @@ class Certificate(ChangeTracker, CertificateBase, FlexiClass, properties={
             )
 
     def save_chain(self):
+        # import q
+        # q(f"Certificate.save_chain(): self.chain_file = {self.chain_file}")
         if self.chain_file is not None:
             with open(self.chain_file, 'wb') as f:
                 f.write(self.get_pem_chain())
 
     def get_pem_chain(self):
-        logging.debug('Getting PEM chain for certificate %s', self.nickname)
         return self.get_pem() + (self.ca.get_pem_chain() if self.ca is not None else b'')

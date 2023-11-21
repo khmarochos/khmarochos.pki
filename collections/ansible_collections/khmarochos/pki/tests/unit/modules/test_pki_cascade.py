@@ -13,7 +13,7 @@ class InitCascadeTest(unittest.TestCase):
 
     def setUp(self):
         with open("test-case-full.yaml", "r") as stream:
-            self.pki_cascade_configuration = (yaml.safe_load(stream))["pki_ca_cascade"]
+            self.pki_cascade_configuration = (yaml.safe_load(stream))["pki_cascade_configuration"]
 
     def test_initialisation(self):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
@@ -29,14 +29,14 @@ class InitCascadeTest(unittest.TestCase):
         pki_cascade = PKICascade(self.pki_cascade_configuration)
         pki_cascade.setup()
         for pki_ca in pki_cascade.pki_cascade.values():
-            certificate = pki_ca.issue(
+            everything = pki_ca.issue(
                 nickname='test',
                 certificate_type=CertificateTypes.CLIENT,
                 certificate_term=1,
                 private_key_encrypted=True,
                 private_key_passphrase_random=True
             )
-            logging.debug(certificate.get_properties())
+            logging.debug(everything['certificate'].get_properties())
 
 if __name__ == '__main__':
     unittest.main()

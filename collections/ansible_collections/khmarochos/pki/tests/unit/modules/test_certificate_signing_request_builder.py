@@ -83,7 +83,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
             certificate_type: BuilderCheckList[CertificateTypes],
             private_key: BuilderCheckList[PrivateKey],
             subject: BuilderCheckList[x509.name.Name],
-            alternative_names: BuilderCheckList[list],
+            subject_alternative_names: BuilderCheckList[list],
             extra_extensions: BuilderCheckList[list]
     ):
         self._test_object(
@@ -94,7 +94,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
             certificate_type=certificate_type,
             private_key=private_key,
             subject=subject,
-            alternative_names=alternative_names,
+            subject_alternative_names=subject_alternative_names,
             extra_extensions=extra_extensions
         )
 
@@ -107,7 +107,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
             certificate_type: BuilderCheckList[CertificateTypes],
             private_key: BuilderCheckList[PrivateKey],
             subject: BuilderCheckList[x509.name.Name],
-            alternative_names: BuilderCheckList[list],
+            subject_alternative_names: BuilderCheckList[list],
             extra_extensions: BuilderCheckList[list]
     ):
         self._test_object(
@@ -118,7 +118,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
             certificate_type=certificate_type,
             private_key=private_key,
             subject=subject,
-            alternative_names=alternative_names,
+            subject_alternative_names=subject_alternative_names,
             extra_extensions=extra_extensions
         )
 
@@ -149,7 +149,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
         provided_to_testset['certificate_type'] = CertificateTypes.CLIENT
         if tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFINED:
             provided_to_testset['certificate_subject_common_name'] = randomizer
-            provided_to_testset['certificate_alternative_names'] = randomizer
+            provided_to_testset['certificate_subject_alternative_names'] = randomizer
             provided_to_testset['certificate_extra_extensions'] = None
         elif tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFAULT:
             pass
@@ -174,15 +174,15 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
         expected_in_builder['subject'] = testset.certificate_subject
         expected_in_outcome['subject'] = testset.certificate_subject
         if tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFINED:
-            provided_to_builder['alternative_names'] = testset.certificate_alternative_names
-            expected_in_builder['alternative_names'] = testset.certificate_alternative_names
-            expected_in_outcome['alternative_names'] = testset.certificate_alternative_names
+            provided_to_builder['subject_alternative_names'] = testset.certificate_subject_alternative_names
+            expected_in_builder['subject_alternative_names'] = testset.certificate_subject_alternative_names
+            expected_in_outcome['subject_alternative_names'] = testset.certificate_subject_alternative_names
             provided_to_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_builder['extra_extensions'] = testset.certificate_extra_extensions
             expected_in_outcome['extra_extensions'] = testset.certificate_extra_extensions
         elif tp_values_assignment == TestCertificateSigningRequestBuilder.TPValuesAssignment.DEFAULT:
-            expected_in_builder['alternative_names'] = (TT.NONE,)
-            expected_in_outcome['alternative_names'] = (TT.NONE,)
+            expected_in_builder['subject_alternative_names'] = (TT.NONE,)
+            expected_in_outcome['subject_alternative_names'] = (TT.NONE,)
             expected_in_builder['extra_extensions'] = (TT.NONE,)
             expected_in_outcome['extra_extensions'] = (TT.NONE,)
         else:
@@ -224,7 +224,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
                     certificate_type=expected_in_builder['certificate_type'],
                     private_key=expected_in_builder['private_key'],
                     subject=expected_in_builder['subject'],
-                    alternative_names=[expected_in_builder['alternative_names']],
+                    subject_alternative_names=[expected_in_builder['subject_alternative_names']],
                     extra_extensions=[expected_in_builder['extra_extensions']],
                 )
             else:
@@ -236,7 +236,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
                     certificate_type=Constants.DEFAULT_CERTIFICATE_TYPE,
                     private_key=(TT.NONE,),
                     subject=(TT.NONE,),
-                    alternative_names=(TT.NONE,),
+                    subject_alternative_names=(TT.NONE,),
                     extra_extensions=(TT.NONE,),
                 )
 
@@ -274,7 +274,7 @@ class TestCertificateSigningRequestBuilder(unittest.TestCase, AbstractBuilderTes
                 certificate_type=expected_in_outcome['certificate_type'],
                 private_key=expected_in_outcome['private_key'],
                 subject=expected_in_outcome['subject'],
-                alternative_names=[expected_in_outcome['alternative_names']],
+                subject_alternative_names=[expected_in_outcome['subject_alternative_names']],
                 extra_extensions=[expected_in_outcome['extra_extensions']],
             )
 

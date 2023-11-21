@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os.path
+from typing import Union
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -82,10 +83,12 @@ class PKICA(ChangeTracker, FlexiClass, properties={
     'certificate_term': {'type': int, 'default': Constants.DEFAULT_CERTIFICATE_TERM},
     'certificate_subject': {'type': x509.name.Name},
     'certificate_subject_country_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_state_or_province_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_state_or_province_name': {
+        'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_locality_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_organization_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
-    'certificate_subject_organizational_unit_name': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
+    'certificate_subject_organizational_unit_name': {
+        'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_email_address': {'mandatory_unless_any': ['certificate_signing_request', 'certificate']},
     'certificate_subject_common_name': {'default': "${name}"},
     # directory names
@@ -109,11 +112,11 @@ class PKICA(ChangeTracker, FlexiClass, properties={
         'default':
             '${root_directory}/openssl.cnf'
     },
-    'ca_private_key_file': {
+    'private_key_file': {
         'default':
             '${private_directory}/${ca_subdirectory}/${nickname}${private_key_file_suffix}'
     },
-    'ca_private_key_passphrase_file': {
+    'private_key_passphrase_file': {
         'default':
             '${private_directory}/${ca_subdirectory}/${nickname}${private_key_passphrase_file_suffix}'
     },
@@ -170,56 +173,58 @@ class PKICA(ChangeTracker, FlexiClass, properties={
             with self.ignore_readonly('private_key_passphrase'):
                 self.private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
                     .init_with_random(
-                        file=self.ca_private_key_passphrase_file,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    file=self.private_key_passphrase_file,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
         if self.private_key is None:
             with self.ignore_readonly('private_key'):
                 self.private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
                     .init_new(
-                        nickname=self.nickname,
-                        file=self.ca_private_key_file,
-                        size=self.private_key_size,
-                        encrypted=self.private_key_encrypted,
-                        passphrase=self.private_key_passphrase,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    nickname=self.nickname,
+                    file=self.private_key_file,
+                    size=self.private_key_size,
+                    encrypted=self.private_key_encrypted,
+                    passphrase=self.private_key_passphrase,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
         if self.certificate_signing_request is None:
             with self.ignore_readonly('certificate_signing_request'):
                 self.certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
                     .init_new(
-                        nickname=self.nickname,
-                        file=self.certificate_signing_request_file,
-                        private_key=self.private_key,
-                        certificate_type=CertificateTypes.CA_INTERMEDIATE,
-                        subject=self.certificate_subject,
-                        alternative_names=None,
-                        extra_extensions=None,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    nickname=self.nickname,
+                    file=self.certificate_signing_request_file,
+                    private_key=self.private_key,
+                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                    subject=self.certificate_subject,
+                    subject_alternative_names=None,
+                    extra_extensions=None,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
+        import q; q(self.certificate_chain_file)
         if self.certificate is None:
             with self.ignore_readonly('certificate'):
                 self.certificate = CertificateBuilder(changes_stack=self.changes_stack).sign_csr(
-                        nickname=self.nickname,
-                        file=self.certificate_file,
-                        certificate_type=CertificateTypes.CA_INTERMEDIATE,
-                        term=self.certificate_term,
-                        ca=self.parent,
-                        subject=self.certificate_subject,
-                        alternative_names=None,
-                        extra_extensions=None,
-                        private_key=self.private_key,
-                        certificate_signing_request=self.certificate_signing_request,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    nickname=self.nickname,
+                    file=self.certificate_file,
+                    chain_file=self.certificate_chain_file,
+                    certificate_type=CertificateTypes.CA_INTERMEDIATE,
+                    term=self.certificate_term,
+                    ca=self.parent,
+                    subject=self.certificate_subject,
+                    subject_alternative_names=None,
+                    extra_extensions=None,
+                    private_key=self.private_key,
+                    certificate_signing_request=self.certificate_signing_request,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
 
     def setup_directories(self):
         for directory, mode in {
@@ -257,15 +262,15 @@ class PKICA(ChangeTracker, FlexiClass, properties={
             certificate_chain_file: str = None,
             certificate_type: CertificateTypes = None,
             certificate_term: int = None,
-            certificate_subject_country: str = None,
-            certificate_subject_state_or_province: str = None,
-            certificate_subject_locality: str = None,
-            certificate_subject_organization: str = None,
-            certificate_subject_organizational_unit: str = None,
+            certificate_subject_country_name: str = None,
+            certificate_subject_state_or_province_name: str = None,
+            certificate_subject_locality_name: str = None,
+            certificate_subject_organization_name: str = None,
+            certificate_subject_organizational_unit_name: str = None,
             certificate_subject_email_address: str = None,
             certificate_subject_common_name: str = None,
             certificate_subject: x509.name.Name = None,
-            certificate_alternative_names: list[str] = None,
+            certificate_subject_alternative_names: list[str] = None,
             certificate_extensions: list[str] = None,
             certificate_signing_request: CertificateSigningRequest = None,
             certificate_signing_request_llo: x509.CertificateSigningRequest = None,
@@ -285,10 +290,10 @@ class PKICA(ChangeTracker, FlexiClass, properties={
             load_if_exists: bool = True,
             save_if_needed: bool = True,
             save_forced: bool = False
-    ) -> Certificate:
+    ) -> dict[str, Union[Certificate, CertificateSigningRequest, PrivateKey, Passphrase, None]]:
         if certificate_signing_request is None:
             if private_key is None:
-                if private_key_passphrase is None:
+                if private_key_passphrase is None and private_key_encrypted:
                     if private_key_passphrase_file is None:
                         private_key_passphrase_file = self.form_filename(
                             nickname,
@@ -298,27 +303,27 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                     if private_key_passphrase_random:
                         private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
                             .init_with_random(
-                                file=private_key_passphrase_file,
-                                length=private_key_passphrase_length,
-                                character_set=private_key_passphrase_character_set,
-                                load_if_exists=load_if_exists,
-                                save_if_needed=save_if_needed,
-                                save_forced=save_forced
-                            )
+                            file=private_key_passphrase_file,
+                            length=private_key_passphrase_length,
+                            character_set=private_key_passphrase_character_set,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
                     elif private_key_passphrase_value is not None:
                         private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
                             .init_with_value(
-                                file=private_key_passphrase_file,
-                                value=private_key_passphrase_value,
-                                load_if_exists=load_if_exists,
-                                save_if_needed=save_if_needed,
-                                save_forced=save_forced
-                            )
+                            file=private_key_passphrase_file,
+                            value=private_key_passphrase_value,
+                            load_if_exists=load_if_exists,
+                            save_if_needed=save_if_needed,
+                            save_forced=save_forced
+                        )
                     else:
                         private_key_passphrase = PassphraseBuilder(changes_stack=self.changes_stack) \
                             .init_with_file(
-                                file=private_key_passphrase_file,
-                            )
+                            file=private_key_passphrase_file,
+                        )
                 if private_key_file is None:
                     private_key_file = self.form_filename(
                         nickname,
@@ -328,28 +333,28 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                 if private_key_llo is None:
                     private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
                         .init_new(
-                            nickname=nickname,
-                            file=private_key_file,
-                            size=private_key_size,
-                            public_exponent=private_key_public_exponent,
-                            encrypted=private_key_encrypted,
-                            passphrase=private_key_passphrase,
-                            load_if_exists=load_if_exists,
-                            save_if_needed=save_if_needed,
-                            save_forced=save_forced
-                        )
+                        nickname=nickname,
+                        file=private_key_file,
+                        size=private_key_size,
+                        public_exponent=private_key_public_exponent,
+                        encrypted=private_key_encrypted,
+                        passphrase=private_key_passphrase,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
                 else:
                     private_key = PrivateKeyBuilder(changes_stack=self.changes_stack) \
                         .init_with_llo(
-                            nickname=nickname,
-                            file=private_key_file,
-                            llo=private_key_llo,
-                            encrypted=private_key_encrypted,
-                            passphrase=private_key_passphrase,
-                            load_if_exists=load_if_exists,
-                            save_if_needed=save_if_needed,
-                            save_forced=save_forced
-                        )
+                        nickname=nickname,
+                        file=private_key_file,
+                        llo=private_key_llo,
+                        encrypted=private_key_encrypted,
+                        passphrase=private_key_passphrase,
+                        load_if_exists=load_if_exists,
+                        save_if_needed=save_if_needed,
+                        save_forced=save_forced
+                    )
             if certificate_signing_request_file is None:
                 certificate_signing_request_file = self.form_filename(
                     nickname,
@@ -360,37 +365,37 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                 if certificate_subject_common_name is None:
                     certificate_subject_common_name = nickname
                 certificate_subject = CertificateBuilderBase.compose_subject(
-                    country_name=certificate_subject_country,
-                    state_or_province_name=certificate_subject_state_or_province,
-                    locality_name=certificate_subject_locality,
-                    organization_name=certificate_subject_organization,
-                    organizational_unit_name=certificate_subject_organizational_unit,
+                    country_name=certificate_subject_country_name,
+                    state_or_province_name=certificate_subject_state_or_province_name,
+                    locality_name=certificate_subject_locality_name,
+                    organization_name=certificate_subject_organization_name,
+                    organizational_unit_name=certificate_subject_organizational_unit_name,
                     email_address=certificate_subject_email_address,
                     common_name=certificate_subject_common_name
                 )
             if certificate_signing_request_llo is None:
                 certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
                     .init_new(
-                        nickname=nickname,
-                        file=certificate_signing_request_file,
-                        private_key=private_key,
-                        certificate_type=certificate_type,
-                        subject=certificate_subject,
-                        alternative_names=certificate_alternative_names,
-                        extra_extensions=certificate_extensions,
-                        load_if_exists=load_if_exists,
-                        save_if_needed=save_if_needed,
-                        save_forced=save_forced
-                    )
+                    nickname=nickname,
+                    file=certificate_signing_request_file,
+                    private_key=private_key,
+                    certificate_type=certificate_type,
+                    subject=certificate_subject,
+                    subject_alternative_names=certificate_subject_alternative_names,
+                    extra_extensions=certificate_extensions,
+                    load_if_exists=load_if_exists,
+                    save_if_needed=save_if_needed,
+                    save_forced=save_forced
+                )
             else:
                 certificate_signing_request = CertificateSigningRequestBuilder(changes_stack=self.changes_stack) \
                     .init_with_llo(
-                        nickname=nickname,
-                        file=certificate_signing_request_file,
-                        llo=certificate_signing_request_llo,
-                        private_key=private_key,
-                        save=True
-                    )
+                    nickname=nickname,
+                    file=certificate_signing_request_file,
+                    llo=certificate_signing_request_llo,
+                    private_key=private_key,
+                    save=True
+                )
             CertificateBuilder._check_after_load(
                 certificate_signing_request,
                 {
@@ -399,7 +404,7 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                     'private_key': private_key,
                     'certificate_type': certificate_type,
                     'subject': certificate_subject,
-                    'alternative_names': certificate_alternative_names,
+                    'subject_alternative_names': certificate_subject_alternative_names,
                     'extra_extensions': certificate_extensions,
                 }
             )
@@ -416,34 +421,33 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                 suffix=self.certificate_chain_file_suffix
             )
         if certificate_llo is None:
-            certificate = CertificateBuilder(changes_stack=self.changes_stack) \
-                .sign_csr(
-                    nickname=nickname,
-                    file=certificate_file,
-                    chain_file=certificate_chain_file,
-                    certificate_type=certificate_type,
-                    term=certificate_term,
-                    ca=self,
-                    subject=certificate_subject,
-                    alternative_names=certificate_alternative_names,
-                    extra_extensions=certificate_extensions,
-                    private_key=private_key,
-                    certificate_signing_request=certificate_signing_request,
-                    load_if_exists=load_if_exists,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced,
-                    save_chain=True
-                )
+            certificate = CertificateBuilder(changes_stack=self.changes_stack).sign_csr(
+                nickname=nickname,
+                file=certificate_file,
+                chain_file=certificate_chain_file,
+                certificate_type=certificate_type,
+                term=certificate_term,
+                ca=self,
+                subject=certificate_subject,
+                subject_alternative_names=certificate_subject_alternative_names,
+                extra_extensions=certificate_extensions,
+                private_key=private_key,
+                certificate_signing_request=certificate_signing_request,
+                load_if_exists=load_if_exists,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced,
+                save_chain=True
+            )
         else:
             certificate = CertificateBuilder(changes_stack=self.changes_stack).init_with_llo(
-                    nickname=nickname,
-                    file=certificate_file,
-                    chain_file=certificate_chain_file,
-                    llo=certificate_llo,
-                    save_if_needed=save_if_needed,
-                    save_forced=save_forced,
-                    save_chain=True
-                )
+                nickname=nickname,
+                file=certificate_file,
+                chain_file=certificate_chain_file,
+                llo=certificate_llo,
+                save_if_needed=save_if_needed,
+                save_forced=save_forced,
+                save_chain=True
+            )
         CertificateBuilder._check_after_load(
             certificate,
             {
@@ -454,13 +458,18 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                 'term': certificate_term,
                 'ca': self,
                 'subject': certificate_subject,
-                'alternative_names': certificate_alternative_names,
+                'subject_alternative_names': certificate_subject_alternative_names,
                 'extra_extensions': certificate_extensions,
                 'private_key': private_key,
                 'certificate_signing_request': certificate_signing_request,
             }
         )
-        return certificate
+        return {
+            'certificate': certificate,
+            'certificate_signing_request': certificate_signing_request,
+            'private_key': private_key,
+            'passphrase': private_key_passphrase
+        }
 
     def form_filename(
             self,

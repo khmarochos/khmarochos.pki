@@ -54,7 +54,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
     'issuer_subject': {'type': x509.name.Name},
     'private_key': {'type': PrivateKey},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list},
+    'subject_alternative_names': {'type': list},
     'extra_extensions': {'type': list},
     'certificate_signing_request': {'type': CertificateSigningRequest},
 }):
@@ -73,8 +73,8 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
                 parameters_assigned['private_key'] = certificate_signing_request.private_key
             if parameters_assigned.get('subject') is None:
                 parameters_assigned['subject'] = certificate_signing_request.subject
-            if parameters_assigned.get('alternative_names') is None:
-                parameters_assigned['alternative_names'] = certificate_signing_request.alternative_names
+            if parameters_assigned.get('subject_alternative_names') is None:
+                parameters_assigned['subject_alternative_names'] = certificate_signing_request.subject_alternative_names
             if parameters_assigned.get('extra_extensions') is None:
                 parameters_assigned['extra_extensions'] = certificate_signing_request.extra_extensions
         if (ca := parameters_assigned.get('ca')) is not None:
@@ -114,7 +114,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
         result = FlexiBuilder.check_after_load_universal(
             object_to_check=certificate,
             parameters_assigned=parameters_assigned,
-            parameters_to_check=['certificate_type', 'term', 'private_key', 'subject', 'alternative_names',
+            parameters_to_check=['certificate_type', 'term', 'private_key', 'subject', 'subject_alternative_names',
                                  'extra_extensions'],
             raise_exception=raise_exception
         )
@@ -185,7 +185,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             issuer_subject: x509.name.Name = None,
             private_key: PrivateKey = None,
             subject: x509.name.Name = None,
-            alternative_names: list = None,
+            subject_alternative_names: list = None,
             extra_extensions: list = None,
             load_if_exists: bool = False,
             save_if_needed: bool = True,
@@ -203,7 +203,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             'issuer_subject': {},
             'private_key': {'mandatory': True},
             'subject': {'mandatory': True},
-            'alternative_names': {},
+            'subject_alternative_names': {},
             'extra_extensions': {},
         })
         generated = False
@@ -223,13 +223,21 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
                     certificate_type=parameters_assigned.get('certificate_type'),
                     term=parameters_assigned.get('term'),
                     subject=parameters_assigned.get('subject'),
-                    alternative_names=parameters_assigned.get('alternative_names'),
+                    subject_alternative_names=parameters_assigned.get('subject_alternative_names'),
                     extra_extensions=parameters_assigned.get('extra_extensions')
                 )
             )
             generated = True
             certificate.anatomize_llo()     # Actually we don't need to do this because the certificate parameters are
                                             # provided to the certificate object itself
+        with certificate.ignore_readonly('chain_file'):
+            certificate.chain_file = parameters_assigned.get('chain_file')
+        with certificate.ignore_readonly('ca'):
+            certificate.ca = parameters_assigned.get('ca')
+        with certificate.ignore_readonly('issuer_private_key'):
+            certificate.issuer_private_key = parameters_assigned.get('issuer_private_key')
+        with certificate.ignore_readonly('issuer_subject'):
+            certificate.issuer_subject = parameters_assigned.get('issuer_subject')
         if save_forced or (save_if_needed and generated):
             certificate.save()
             if save_chain:
@@ -249,7 +257,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             issuer_subject: x509.name.Name = None,
             private_key: PrivateKey = None,
             subject: x509.name.Name = None,
-            alternative_names: list = None,
+            subject_alternative_names: list = None,
             extra_extensions: list = None,
             certificate_signing_request: CertificateSigningRequest = None,
             load_if_exists: bool = False,
@@ -268,7 +276,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             'issuer_subject': {},
             'private_key': {},
             'subject': {},
-            'alternative_names': {},
+            'subject_alternative_names': {},
             'extra_extensions': {},
             'certificate_signing_request': {'mandatory': True},
         })
@@ -290,7 +298,7 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
                         'issuer_subject',
                         'private_key',
                         'subject',
-                        'alternative_names',
+                        'subject_alternative_names',
                         'extra_extensions'
                     ]
                 },
@@ -302,13 +310,22 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
                     certificate_type=parameters_assigned.get('certificate_type'),
                     term=parameters_assigned.get('term'),
                     subject=parameters_assigned.get('subject'),
-                    alternative_names=parameters_assigned.get('alternative_names'),
+                    subject_alternative_names=parameters_assigned.get('subject_alternative_names'),
                     extra_extensions=parameters_assigned.get('extra_extensions')
                 )
             )
             certificate.anatomize_llo()     # We need to do this because the certificate parameters are provided by
                                             # the certificate signing request
             generated = True
+        with certificate.ignore_readonly('chain_file'):
+            certificate.chain_file = parameters_assigned.get('chain_file')
+        with certificate.ignore_readonly('ca'):
+            certificate.ca = parameters_assigned.get('ca')
+        with certificate.ignore_readonly('issuer_private_key'):
+            certificate.issuer_private_key = parameters_assigned.get('issuer_private_key')
+        with certificate.ignore_readonly('issuer_subject'):
+            certificate.issuer_subject = parameters_assigned.get('issuer_subject')
+        # import q; q(f"{save_if_needed}, {generated}, {save_forced}, {save_chain}, {self.chain_file}, {certificate.chain_file}")
         if save_forced or (save_if_needed and generated):
             certificate.save()
             if save_chain:

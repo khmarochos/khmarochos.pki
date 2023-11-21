@@ -23,14 +23,15 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.exceptions \
 from ansible_collections.khmarochos.pki.plugins.module_utils.pki_cascade \
     import PKICascade
 
-
 ARGUMENT_SPEC = {
-    'pki_ca_cascade': {'required': True, 'type': 'dict'}
+    'pki_ca_cascade': {'required': True, 'type': 'dict'},
+    'load_if_exists': {'required': False, 'type': 'bool', 'default': True},
+    'save_if_needed': {'required': False, 'type': 'bool', 'default': True},
+    'save_forced': {'required': False, 'type': 'bool', 'default': False}
 }
 
 
 def main():
-
     module = AnsibleModule(argument_spec=ARGUMENT_SPEC)
 
     changes_stack = ChangesStack()
@@ -46,7 +47,11 @@ def main():
         module.fail_json(msg=f"Can't traverse the CA cascade: {e.__str__()}")
 
     try:
-        pki_cascade.setup()
+        pki_cascade.setup(
+            load_if_exists=module.params['load_if_exists'],
+            save_if_needed=module.params['save_if_needed'],
+            save_forced=module.params['save_forced']
+        )
     except Exception as e:
         module.fail_json(msg=f"Can't set up the CA cascade: {e.__str__()}")
 
@@ -54,6 +59,7 @@ def main():
         changed=bool(len(changes_stack) > 0),
         result=pki_cascade.pki_cascade_json()
     )
+
 
 if __name__ == '__main__':
     main()

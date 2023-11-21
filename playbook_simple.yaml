@@ -21,13 +21,14 @@
       debug:
         msg: "{{ configuration_dictionary }}"
 
-    - name: Look up something
-      debug:
-        msg: "{{ lookup('khmarochos.pki.pki_dictionary', ca='root', parameter='certificate_chain_file') }}"
+#    - name: Look up something
+#      debug:
+#        msg: "{{ lookup('khmarochos.pki.pki_dictionary', ca='root', parameter='certificate_chain_file') }}"
 
     - name: Initialise the PKI cascade
       khmarochos.pki.init_pki:
         pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        save_forced: true
 
     - name: Issue a certificate
       khmarochos.pki.issue_everything:
@@ -53,6 +54,9 @@
           nickname: test-client
           certificate_type: client
           certificate_term: 365
+          certificate_subject_alternative_names:
+            - DNS:localhost
+            - IP:127.0.0.1
           private_key_passphrase_random: true
           private_key_encrypted: true
       register: certificate

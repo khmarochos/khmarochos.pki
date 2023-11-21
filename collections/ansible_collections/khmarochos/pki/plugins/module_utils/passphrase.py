@@ -38,3 +38,8 @@ class Passphrase(ChangeTracker, FlexiClass, properties={
 
     def get_length(self) -> int:
         return len(self.value) if self.value is not None else None
+
+    def get_properties(self, builtins_only: bool = False, hide_value: bool = True):
+        if 'value' in (result := super().get_properties(builtins_only=builtins_only)) and hide_value:
+            del(result['value'])
+        return result

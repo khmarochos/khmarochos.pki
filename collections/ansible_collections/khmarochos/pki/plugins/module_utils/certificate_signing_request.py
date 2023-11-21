@@ -35,7 +35,7 @@ class CertificateSigningRequest(ChangeTracker, CertificateBase, FlexiClass, prop
     'file': {'mandatory': True},
     'certificate_type': {'type': CertificateTypes},
     'subject': {'type': x509.name.Name},
-    'alternative_names': {'type': list},
+    'subject_alternative_names': {'type': list},
     'extra_extensions': {'type': list},
     'private_key': {'type': PrivateKey},
 }):
