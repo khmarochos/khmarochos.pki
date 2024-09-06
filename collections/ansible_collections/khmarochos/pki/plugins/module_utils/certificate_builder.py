@@ -325,7 +325,6 @@ class CertificateBuilder(ChangeTracker, CertificateBuilderBase, FlexiBuilder, pr
             certificate.issuer_private_key = parameters_assigned.get('issuer_private_key')
         with certificate.ignore_readonly('issuer_subject'):
             certificate.issuer_subject = parameters_assigned.get('issuer_subject')
-        # import q; q(f"{save_if_needed}, {generated}, {save_forced}, {save_chain}, {self.chain_file}, {certificate.chain_file}")
         if save_forced or (save_if_needed and generated):
             certificate.save()
             if save_chain:

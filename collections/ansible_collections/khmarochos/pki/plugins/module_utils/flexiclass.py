@@ -83,8 +83,6 @@ class FlexiClass:
 
     def __init__(self, **kwargs):
 
-        # q(self, kwargs)
-
         # Initialize the object's parameters
         self._object_properties = {}
         self._property_bindings = {}
@@ -291,7 +289,6 @@ class FlexiClass:
         return _fset
 
     def _interpolator(self, string: str):
-
         def call_getter(match: re.Match):
             if bool(match.group('left_brace')) != bool(match.group('right_brace')):
                 raise UnbalancedBraces(f"Unbalanced curly braces in {match.string}")

@@ -206,7 +206,6 @@ class PKICA(ChangeTracker, FlexiClass, properties={
                     save_if_needed=save_if_needed,
                     save_forced=save_forced
                 )
-        import q; q(self.certificate_chain_file)
         if self.certificate is None:
             with self.ignore_readonly('certificate'):
                 self.certificate = CertificateBuilder(changes_stack=self.changes_stack).sign_csr(

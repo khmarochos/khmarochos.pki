@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import q
-
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker \
