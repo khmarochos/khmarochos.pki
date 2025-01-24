@@ -117,7 +117,7 @@ class CertificateBuilderBase:
         else:
             raise ValueError(f"Unknown certificate type: {certificate_type}")
         if not_valid_before is None:
-            not_valid_before = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
+            not_valid_before = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
         builder = builder.add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_private_key.llo.public_key()),
             False

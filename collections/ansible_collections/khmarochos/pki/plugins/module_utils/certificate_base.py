@@ -29,7 +29,7 @@ class CertificateBase:
 
         if isinstance(self.llo, x509.Certificate):
             with self.ignore_readonly('term'):
-                self.term = (self.llo.not_valid_after - self.llo.not_valid_before).days
+                self.term = (self.llo.not_valid_after_utc - self.llo.not_valid_before_utc).days
         with \
                 self.ignore_readonly('subject'), \
                 self.ignore_readonly('certificate_type'), \
