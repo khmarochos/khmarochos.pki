@@ -507,6 +507,8 @@ class TestingSet(FlexiClass, properties={
             self.certificate_signing_request_file.close()
         if self.certificate_file is not None:
             self.certificate_file.close()
+        if self.certificate_chain_file is not None:
+            self.certificate_chain_file.close()
 
 
 class AbstractBuilderTest(ABC):
