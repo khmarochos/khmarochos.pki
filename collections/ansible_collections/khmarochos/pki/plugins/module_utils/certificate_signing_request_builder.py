@@ -20,7 +20,8 @@ from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_signing
     CertificateSigningRequest
 from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangeTracker
 from ansible_collections.khmarochos.pki.plugins.module_utils.private_key import PrivateKey
-from ansible_collections.khmarochos.pki.plugins.module_utils.constants import CertificateTypes
+from ansible_collections.khmarochos.pki.plugins.module_utils.constants import \
+    CertificateTypes, Constants
 from ansible_collections.khmarochos.pki.plugins.module_utils.certificate_builder_base import CertificateBuilderBase
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexibuilder import FlexiBuilder
 from ansible_collections.khmarochos.pki.plugins.module_utils.flexiclass import FlexiClass
@@ -38,7 +39,7 @@ class CertificateSigningRequestBuilder(ChangeTracker, CertificateBuilderBase, Fl
     'nickname': {},
     'llo': {'type': x509.CertificateSigningRequest},
     'file': {},
-    'certificate_type': {'type': CertificateTypes, 'default': CertificateTypes.CLIENT},
+    'certificate_type': {'type': CertificateTypes, 'default': Constants.DEFAULT_CERTIFICATE_TYPE},
     'subject': {'type': x509.name.Name},
     'subject_alternative_names': {'type': list},
     'extra_extensions': {'type': list},

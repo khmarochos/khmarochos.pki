@@ -38,7 +38,7 @@ class CertificateBase:
             self.subject = self.llo.subject
             self.subject_alternative_names = None
             self.extra_extensions = None
-            self.certificate_type = None
+            self.certificate_type = CertificateTypes.NONE
             certificate_type_candidates = {
                 CertificateTypes.CLIENT: 0,
                 CertificateTypes.SERVER: 0,
@@ -137,8 +137,8 @@ class CertificateBase:
             }
             if len(certificate_type_candidates) == 1 and certificate_type_max_score > 0:
                 self.certificate_type = list(certificate_type_candidates.keys())[0]
-            else:
-                raise RuntimeError(f"Unable to determine certificate type: {format(certificate_type_candidates)}")
+            # else:
+            #     raise RuntimeError(f"Unable to determine certificate type: {format(certificate_type_candidates)}")
 
 
     def save(self):

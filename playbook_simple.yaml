@@ -64,3 +64,19 @@
     - name: Show the certificate's information
       debug:
         msg: "{{ certificate.result }}"
+
+    - name: Issue a certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test-none
+          certificate_type: none
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true
+      register: certificate
+
+    - name: Show the certificate's information
+      debug:
+        msg: "{{ certificate.result }}"

@@ -114,6 +114,8 @@ class CertificateBuilderBase:
                 True
             )
             builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
+        elif certificate_type == CertificateTypes.NONE:
+            pass
         else:
             raise ValueError(f"Unknown certificate type: {certificate_type}")
         if not_valid_before is None:

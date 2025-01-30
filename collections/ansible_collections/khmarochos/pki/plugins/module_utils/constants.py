@@ -21,6 +21,7 @@ class CertificateTypes(enum.Enum):
     CA_INTERMEDIATE = 'CA_INTERMEDIATE'
     SERVER = 'SERVER'
     CLIENT = 'CLIENT'
+    NONE = 'NONE'
 
 
 class CertificateExtensionPurposes(enum.Enum):
@@ -30,7 +31,7 @@ class CertificateExtensionPurposes(enum.Enum):
 
 class Constants:
     DEFAULT_CERTIFICATE_TERM = 90
-    DEFAULT_CERTIFICATE_TYPE = CertificateTypes.CLIENT
+    DEFAULT_CERTIFICATE_TYPE = CertificateTypes.NONE
     DEFAULT_PRIVATE_KEY_SIZE = 4096
     DEFAULT_PRIVATE_KEY_PUBLIC_EXPONENT = 0x10001   # 0d65537
     DEFAULT_PRIVATE_KEY_ENCRYPTED = False

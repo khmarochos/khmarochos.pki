@@ -20,6 +20,8 @@ def translate_certificate_parameters(certificate_parameters: dict = None, clone:
         certificate_parameters = {}
     if clone:
         certificate_parameters = certificate_parameters.copy()
-    if certificate_parameters.get('certificate_type') is not None:
+    if certificate_parameters.get('certificate_type') is None:
+        certificate_parameters['certificate_type'] = CertificateTypes.NONE
+    else:
         certificate_parameters['certificate_type'] = CertificateTypes[certificate_parameters['certificate_type'].upper()]
     return certificate_parameters
