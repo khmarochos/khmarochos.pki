@@ -21,6 +21,7 @@ class CertificateTypes(enum.Enum):
     CA_INTERMEDIATE = 'CA_INTERMEDIATE'
     SERVER = 'SERVER'
     CLIENT = 'CLIENT'
+    SERVER_CLIENT = 'SERVER_CLIENT'
     NONE = 'NONE'
 
 

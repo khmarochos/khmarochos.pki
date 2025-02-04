@@ -42,6 +42,7 @@ class CertificateBase:
             certificate_type_candidates = {
                 CertificateTypes.CLIENT: 0,
                 CertificateTypes.SERVER: 0,
+                CertificateTypes.SERVER_CLIENT: 0,
                 CertificateTypes.CA_STUBBY: 0,
                 CertificateTypes.CA_INTERMEDIATE: 0
             }
@@ -51,42 +52,50 @@ class CertificateBase:
                         if extension.value.path_length == 0:
                             certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                            certificate_type_candidates[CertificateTypes.SERVER_CLIENT] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                             certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] -= 1
                         else:
                             certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                            certificate_type_candidates[CertificateTypes.SERVER_CLIENT] = BIG_NEGATIVE
                             certificate_type_candidates[CertificateTypes.CA_STUBBY] -= 1
                             certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                 elif extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
                     if extension.value.digital_signature:
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.key_cert_sign:
                         certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.crl_sign:
                         certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] += 1
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.key_agreement:
                         certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] += 1
                     if extension.value.key_encipherment:
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                     if extension.value.data_encipherment:
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                     # if extension.value.encipher_only:
@@ -97,13 +106,13 @@ class CertificateBase:
                     if x509.oid.ExtendedKeyUsageOID.SERVER_AUTH in extension.value:
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
-                        certificate_type_candidates[CertificateTypes.CLIENT] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                         certificate_type_candidates[CertificateTypes.SERVER] += 1
                     if x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH in extension.value:
                         certificate_type_candidates[CertificateTypes.CA_STUBBY] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CA_INTERMEDIATE] = BIG_NEGATIVE
                         certificate_type_candidates[CertificateTypes.CLIENT] += 1
-                        certificate_type_candidates[CertificateTypes.SERVER] = BIG_NEGATIVE
+                        certificate_type_candidates[CertificateTypes.SERVER_CLIENT] += 1
                 elif extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
                     if self.subject_alternative_names is None:
                         self.subject_alternative_names = []
@@ -130,15 +139,25 @@ class CertificateBase:
                             'extension': extension.value
                         }
                     )
+            # I don't like how it works, to be honest, though it works
             certificate_type_max_score = max(certificate_type_candidates.values())
-            certificate_type_candidates = {
-                certificate_type: score for certificate_type, score in certificate_type_candidates.items()
-                    if score == certificate_type_max_score
-            }
-            if len(certificate_type_candidates) == 1 and certificate_type_max_score > 0:
-                self.certificate_type = list(certificate_type_candidates.keys())[0]
-            # else:
-            #     raise RuntimeError(f"Unable to determine certificate type: {format(certificate_type_candidates)}")
+            if (
+                    certificate_type_candidates[CertificateTypes.SERVER] ==
+                    certificate_type_candidates[CertificateTypes.CLIENT] ==
+                    certificate_type_candidates[CertificateTypes.SERVER_CLIENT] ==
+                    certificate_type_max_score and
+                    certificate_type_max_score > 0
+            ):
+                self.certificate_type = CertificateTypes.SERVER_CLIENT
+            else:
+                certificate_type_candidates = {
+                    certificate_type: score for certificate_type, score in certificate_type_candidates.items()
+                        if score == certificate_type_max_score
+                }
+                if len(certificate_type_candidates) > 0 and certificate_type_max_score > 0:
+                    self.certificate_type = list(certificate_type_candidates.keys())[0]
+                # else:
+                #     raise RuntimeError(f"Unable to determine certificate type: {format(certificate_type_candidates)}")
 
 
     def save(self):

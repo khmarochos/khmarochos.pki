@@ -78,7 +78,6 @@ class CertificateBuilderBase:
                 x509.BasicConstraints(ca=True, path_length=0),
                 True
             )
-            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
         elif certificate_type == CertificateTypes.CA_INTERMEDIATE:
             key_usage_dictionary['digital_signature'] = True
             key_usage_dictionary['key_cert_sign'] = True
@@ -87,37 +86,35 @@ class CertificateBuilderBase:
                 x509.BasicConstraints(ca=True, path_length=None),
                 True
             )
-            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
-        elif certificate_type == CertificateTypes.CLIENT:
+        elif certificate_type in (
+                CertificateTypes.SERVER,
+                CertificateTypes.CLIENT,
+                CertificateTypes.SERVER_CLIENT
+        ):
             key_usage_dictionary['digital_signature'] = True
             key_usage_dictionary['key_encipherment'] = True
             key_usage_dictionary['data_encipherment'] = True
             builder = builder.add_extension(
-                x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH]),
-                True
-            )
-            builder = builder.add_extension(
                 x509.BasicConstraints(ca=False, path_length=None),
                 True
             )
-            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
-        elif certificate_type == CertificateTypes.SERVER:
-            key_usage_dictionary['digital_signature'] = True
-            key_usage_dictionary['key_encipherment'] = True
-            key_usage_dictionary['data_encipherment'] = True
             builder = builder.add_extension(
-                x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]),
+                x509.ExtendedKeyUsage(
+                    {
+                        CertificateTypes.SERVER: [x509.oid.ExtendedKeyUsageOID.SERVER_AUTH],
+                        CertificateTypes.CLIENT: [x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH],
+                        CertificateTypes.SERVER_CLIENT: [
+                            x509.oid.ExtendedKeyUsageOID.SERVER_AUTH,
+                            x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH
+                        ]
+                    }.get(certificate_type, [])),
                 True
             )
-            builder = builder.add_extension(
-                x509.BasicConstraints(ca=False, path_length=None),
-                True
-            )
-            builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
         elif certificate_type == CertificateTypes.NONE:
             pass
         else:
             raise ValueError(f"Unknown certificate type: {certificate_type}")
+        builder = builder.add_extension(x509.KeyUsage(**key_usage_dictionary), True)
         if not_valid_before is None:
             not_valid_before = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
         builder = builder.add_extension(

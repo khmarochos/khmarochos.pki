@@ -341,7 +341,7 @@ class TestCertificateBuilder(unittest.TestCase, AbstractBuilderTest):
         provided_to_testset['passphrase_random'] = True
         provided_to_testset['passphrase_length'] = randomizer
         provided_to_testset['passphrase_character_set'] = randomizer
-        provided_to_testset['certificate_type'] = CertificateTypes.CLIENT
+        provided_to_testset['certificate_type'] = CertificateTypes.NONE
         if tp_values_assignment == TestCertificateBuilder.TPValuesAssignment.DEFINED:
             provided_to_testset['certificate_term'] = randomizer
             provided_to_testset['certificate_subject_common_name'] = randomizer

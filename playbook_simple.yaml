@@ -65,7 +65,55 @@
       debug:
         msg: "{{ certificate.result }}"
 
-    - name: Issue a certificate
+    - name: Issue a server's certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test-server
+          certificate_type: server
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true
+      register: certificate
+
+    - name: Show the server's certificate's information
+      debug:
+        msg: "{{ certificate.result }}"
+
+    - name: Issue a client's certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test-client
+          certificate_type: client
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true
+      register: certificate
+
+    - name: Show the client's certificate's information
+      debug:
+        msg: "{{ certificate.result }}"
+
+    - name: Issue a server's/client's certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: root
+        certificate_parameters:
+          nickname: test-server-client
+          certificate_type: server-client
+          certificate_term: 365
+          private_key_passphrase_random: true
+          private_key_encrypted: true
+      register: certificate
+
+    - name: Show the server's/client's certificate's information
+      debug:
+        msg: "{{ certificate.result }}"
+
+- name: Issue a certificate
       khmarochos.pki.issue_everything:
         pki_ca_cascade: "{{ pki_cascade_configuration }}"
         ca_nickname: root
