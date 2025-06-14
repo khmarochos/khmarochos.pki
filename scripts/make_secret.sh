@@ -71,6 +71,22 @@ die() {
     exit "${exit_code}"
 }
 
+cleanup() {
+    if [[ -v __TO_BE_REMOVED[@] && ${#TO_BE_REMOVED[@]} -ne 0 ]]; then
+        local entity_to_remove
+        for entity_to_remove in "${!__TO_BE_REMOVED[@]}"; do
+            log "Removing ${__TO_BE_REMOVED[${entity_to_remove}]}..."
+            rm -rf "${__TO_BE_REMOVED[${entity_to_remove}]}"
+            if [[ ${?} -ne 0 ]]; then
+                warn "Can't remove ${__TO_BE_REMOVED[${entity_to_remove}]}."
+            fi
+        done
+    fi
+}
+
+# Set trap to ensure cleanup happens even on error
+trap cleanup EXIT INT TERM
+
 #
 # Usage function
 #
@@ -260,14 +276,14 @@ if [[ ${is_intermediate_ca} -eq 1 ]]; then
     # For intermediate sub-CAs, look in their own directories
     certificate_base_dir="${pki_base}/${certificate_nickname}"
     certificate_dir="${certificate_base_dir}/certs/CA"
-    key_dir="${certificate_base_dir}/private/CA"
+    private_key_dir="${certificate_base_dir}/private/CA"
 else
     # For regular certificates, look in the CA's directories
     certificate_dir="${ca_directory}/certs"
-    key_dir="${ca_directory}/private"
+    private_key_dir="${ca_directory}/private"
 fi
 
-# Fetch CA certificate
+# Find CA certificate
 if [[ ${ca_with_chain} -eq 1 ]]; then
     ca_certificate_file="${ca_directory}/certs/CA/${ca_nickname}.chain.crt"
 else
@@ -278,9 +294,11 @@ if [[ ! -f "${ca_certificate_file}" ]]; then
     die 5 "CA certificate file not found: ${ca_certificate_file}"
 fi
 
-ca_certificate=$(<"${ca_certificate_file}")
+ca_certificate_encoded_file="$(mktemp -t ca_certificate.XXXXXX)"
+__TO_BE_REMOVED+=("${ca_certificate_encoded_file}")
+base64 -w 0 "${ca_certificate_file}" > "${ca_certificate_encoded_file}"
 
-# Fetch certificate
+# Find certificate
 if [[ ${certificate_with_chain} -eq 1 ]]; then
     certificate_file="${certificate_dir}/${certificate_nickname}.chain.crt"
 else
@@ -291,73 +309,57 @@ if [[ ! -f "${certificate_file}" ]]; then
     die 6 "Certificate file not found: ${certificate_file}"
 fi
 
-certificate=$(<"${certificate_file}")
+certificate_encoded_file="$(mktemp -t certificate.XXXXXX)"
+__TO_BE_REMOVED+=("${certificate_encoded_file}")
+base64 -w 0 "${certificate_file}" > "${certificate_encoded_file}"
 
-# Fetch private key
-key_file="${key_dir}/${certificate_nickname}.key"
+# Find private key
+private_key_file="${private_key_dir}/${certificate_nickname}.key"
 
-if [[ ! -f "${key_file}" ]]; then
-    die 7 "Private key file not found: ${key_file}"
+if [[ ! -f "${private_key_file}" ]]; then
+    die 7 "Private key file not found: ${private_key_file}"
 fi
 
+private_key_encoded_file="$(mktemp -t private_key.XXXXXX)"
+__TO_BE_REMOVED+=("${private_key_encoded_file}")
+chmod 600 "${private_key_encoded_file}"
 # Check if key is encrypted
-if grep -q "ENCRYPTED" "${key_file}" 2>/dev/null; then
+if grep -q "ENCRYPTED" "${private_key_file}" 2>/dev/null; then
     # Look for passphrase file
-    passphrase_file="${key_file}_passphrase"
+    passphrase_file="${private_key_file}_passphrase"
     if [[ -f "${passphrase_file}" ]]; then
-        passphrase=$(<"${passphrase_file}")
+        passphrase="$(<"${passphrase_file}")"
         # Decrypt the key
-        private_key=$(openssl rsa -in "${key_file}" -passin "pass:${passphrase}" 2>/dev/null)
+        openssl rsa -in "${private_key_file}" -passin "pass:${passphrase}" 2>/dev/null | base64 -w 0 > "${private_key_encoded_file}"
         if [[ $? -ne 0 ]]; then
-            die 8 "Failed to decrypt private key: ${key_file}"
+            die 8 "Failed to decrypt private key: ${private_key_file}"
         fi
     else
         die 9 "Private key is encrypted but passphrase file not found: ${passphrase_file}"
     fi
 else
     # Key is not encrypted
-    private_key=$(<"${key_file}")
+    base64 -w 0 "${private_key_file}" > "${private_key_encoded_file}"
 fi
 
 # Generate Kubernetes secret
 if [[ ${opaque} -eq 1 ]]; then
-    # Opaque secret type
-    cat <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ${certificate_nickname}-tls
-type: Opaque
-data:
-  tls.crt: $(echo -n "${certificate}" | base64 -w 0)
-  tls.key: $(echo -n "${private_key}" | base64 -w 0)
-EOF
+    secret_type="Opaque"
 else
-    # kubernetes.io/tls secret type
-    if [[ ${no_ca} -eq 1 ]]; then
-        # Without CA certificate
-        cat <<EOF
+    secret_type="kubernetes.io/tls"
+fi
+cat <<EOF
 apiVersion: v1
 kind: Secret
 metadata:
   name: ${certificate_nickname}-tls
-type: kubernetes.io/tls
+type: ${secret_type}
 data:
-  tls.crt: $(echo -n "${certificate}" | base64 -w 0)
-  tls.key: $(echo -n "${private_key}" | base64 -w 0)
+  tls.crt: $(<"${certificate_encoded_file}")
+  tls.key: $(<"${private_key_encoded_file}")
 EOF
-    else
-        # With CA certificate
-        cat <<EOF
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ${certificate_nickname}-tls
-type: kubernetes.io/tls
-data:
-  tls.crt: $(echo -n "${certificate}" | base64 -w 0)
-  tls.key: $(echo -n "${private_key}" | base64 -w 0)
-  ca.crt: $(echo -n "${ca_certificate}" | base64 -w 0)
+if [[ ${no_ca} -ne 1 ]]; then
+    cat <<EOF
+  ca.crt: $(<"${ca_certificate_encoded_file}")
 EOF
-    fi
 fi
