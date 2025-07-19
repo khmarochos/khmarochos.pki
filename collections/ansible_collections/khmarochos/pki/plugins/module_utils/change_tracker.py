@@ -52,6 +52,15 @@ class ChangesStack:
     def list(self) -> list[Change]:
         return self._changes_stack
 
+    def print(self):
+        if not self._changes_stack:
+            print("No changes in stack")
+            return
+        for i, change in enumerate(self._changes_stack, 1):
+            time_str = change.time.strftime("%Y-%m-%d %H:%M:%S") if change.time else "Unknown time"
+            comment_str = change.comment if change.comment else "No comment"
+            print(f"{i:2d}. {time_str} - {comment_str}")
+
 
 class ChangeTracker:
 
