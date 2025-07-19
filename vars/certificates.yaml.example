@@ -1,0 +1,87 @@
+---
+# Certificate Parameters Example
+# Copy this file to certificates.yaml and customize for your environment
+
+certificate_parameters:
+  # Web server certificate
+  - ca_nickname: server
+    certificate_parameters:
+      nickname: "web.{{ domain }}"
+      certificate_subject_common_name: "Web Server ({{ domain }})"
+      certificate_subject_alternative_names:
+        - "DNS:web.{{ domain }}"
+        - "DNS:www.{{ domain }}"
+        - "DNS:{{ domain }}"
+      certificate_type: SERVER
+      certificate_term: 365
+      private_key_encrypted: false
+
+  # API server certificate
+  - ca_nickname: server
+    certificate_parameters:
+      nickname: "api.{{ domain }}"
+      certificate_subject_common_name: "API Server ({{ domain }})"
+      certificate_subject_alternative_names:
+        - "DNS:api.{{ domain }}"
+        - "DNS:rest.{{ domain }}"
+      certificate_type: SERVER
+      certificate_term: 365
+      private_key_encrypted: false
+
+  # Router web interface certificate
+  - ca_nickname: router
+    certificate_parameters:
+      nickname: "router.{{ domain }}"
+      certificate_subject_common_name: "Router Web Interface ({{ domain }})"
+      certificate_subject_alternative_names:
+        - "DNS:router.{{ domain }}"
+        - "DNS:www.router.{{ domain }}"
+        - "IP:192.168.1.1"
+      certificate_type: SERVER
+      certificate_term: 1460  # 4 years
+      private_key_encrypted: false
+
+  # VPN server certificate
+  - ca_nickname: router
+    certificate_parameters:
+      nickname: "vpn.{{ domain }}"
+      certificate_subject_common_name: "VPN Server ({{ domain }})"
+      certificate_subject_alternative_names:
+        - "DNS:vpn.{{ domain }}"
+        - "DNS:openvpn.{{ domain }}"
+      certificate_type: SERVER
+      certificate_term: 1460  # 4 years
+      private_key_encrypted: false
+
+  # Admin client certificate
+  - ca_nickname: client
+    certificate_parameters:
+      nickname: "admin.{{ domain }}"
+      certificate_subject_common_name: "Administrator Client ({{ domain }})"
+      certificate_subject_email_address: "admin@{{ domain }}"
+      certificate_type: CLIENT
+      certificate_term: 180  # 6 months
+      private_key_encrypted: true
+      private_key_passphrase_random: true
+
+  # Service account certificate
+  - ca_nickname: client
+    certificate_parameters:
+      nickname: "service.{{ domain }}"
+      certificate_subject_common_name: "Service Account ({{ domain }})"
+      certificate_type: CLIENT
+      certificate_term: 730  # 2 years
+      private_key_encrypted: false
+
+  # Multi-purpose certificate for testing
+  - ca_nickname: server
+    certificate_parameters:
+      nickname: "test.{{ domain }}"
+      certificate_subject_common_name: "Test Certificate ({{ domain }})"
+      certificate_subject_alternative_names:
+        - "DNS:test.{{ domain }}"
+        - "DNS:localhost"
+        - "IP:127.0.0.1"
+      certificate_type: SERVER_CLIENT
+      certificate_term: 90
+      private_key_encrypted: false

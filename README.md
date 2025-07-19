@@ -170,10 +170,12 @@ The PKI configuration uses a hierarchical structure with special keys:
 
 | Type | Description | Usage |
 |------|-------------|-------|
-| `server` | Server authentication | Web servers, APIs |
-| `client` | Client authentication | User certificates |
-| `server-client` | Combined usage | Multi-purpose certificates |
-| `none` | No specific usage | Custom certificates |
+| `SERVER` | Server authentication | Web servers, APIs |
+| `CLIENT` | Client authentication | User certificates |
+| `SERVER_CLIENT` | Combined usage | Multi-purpose certificates |
+| `NONE` | No specific usage | Custom certificates |
+
+**Note:** Certificate types must be specified in uppercase as they correspond to the internal enum values.
 
 ## Modules
 
@@ -357,6 +359,133 @@ Issue certificates with private keys and CSRs.
         - { nickname: "web-server", type: "server" }
         - { nickname: "api-server", type: "server" }
       when: "'Certificate will expire' in cert_expiry.stdout"
+```
+
+## Docker Usage
+
+### Quick Start with Docker
+
+The Docker container is designed to run your PKI playbooks with mounted configuration files:
+
+```bash
+# Build the container
+docker build -t khmarochos/pki .
+
+# Run with mounted files
+docker run --rm \
+  -v $(pwd)/pki:/app/pki \
+  -v $(pwd)/vars/ca-tree.yaml:/app/vars/ca-tree.yaml:ro \
+  -v $(pwd)/playbook.yaml:/app/playbook.yaml:ro \
+  khmarochos/pki
+```
+
+### Required File Structure
+
+The container expects the following mounted files:
+
+```
+your-project/
+├── pki/                    # Your PKI directory tree (read/write)
+├── vars/
+│   ├── ca-tree.yaml       # CA hierarchy configuration (read-only)
+│   └── certificates.yaml  # Certificate definitions (read-only)
+└── playbook.yaml          # Your Ansible playbook (read-only)
+```
+
+### Quick Setup
+
+Use the provided example files to get started quickly:
+
+```bash
+# Copy example files
+cp vars/ca-tree.yaml.example vars/ca-tree.yaml
+cp vars/certificates.yaml.example vars/certificates.yaml
+
+# Edit the configuration files for your environment
+# Then run with Docker (uses built-in default playbook)
+docker run --rm \
+  -v $(pwd)/pki:/app/pki \
+  -v $(pwd)/vars/ca-tree.yaml:/app/vars/ca-tree.yaml:ro \
+  -v $(pwd)/vars/certificates.yaml:/app/vars/certificates.yaml:ro \
+  khmarochos/pki
+```
+
+### Using a Custom Playbook
+
+If you want to use your own playbook instead of the default:
+
+```bash
+# Create your custom playbook
+cp playbook.yaml my-custom-playbook.yaml
+# Edit my-custom-playbook.yaml as needed
+
+# Run with custom playbook
+docker run --rm \
+  -v $(pwd)/pki:/app/pki \
+  -v $(pwd)/vars/ca-tree.yaml:/app/vars/ca-tree.yaml:ro \
+  -v $(pwd)/vars/certificates.yaml:/app/vars/certificates.yaml:ro \
+  -v $(pwd)/my-custom-playbook.yaml:/app/playbook.yaml:ro \
+  khmarochos/pki
+```
+
+### Docker Compose
+
+For easier management, use docker-compose with environment variables:
+
+```bash
+# Set environment variables
+export PKI_DIR=/path/to/your/pki
+export CA_TREE_CONFIG=/path/to/your/vars/ca-tree.yaml
+export PLAYBOOK_FILE=/path/to/your/playbook.yaml
+
+# Run the container
+docker-compose up --rm
+```
+
+### Environment Variables for docker-compose
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PKI_DIR` | Path to your PKI directory | `./pki` |
+| `CA_TREE_CONFIG` | Path to CA hierarchy config | `./vars/ca-tree.yaml` |
+| `PLAYBOOK_FILE` | Path to your playbook | `./playbook.yaml` |
+
+### Example .env file
+
+Create a `.env` file in your project directory:
+
+```env
+PKI_DIR=./pki
+CA_TREE_CONFIG=./vars/ca-tree.yaml
+PLAYBOOK_FILE=./setup-pki.yaml
+```
+
+### Running Custom Commands
+
+You can override the default command to run custom operations:
+
+```bash
+# Run a different playbook
+docker run --rm \
+  -v $(pwd)/pki:/app/pki \
+  -v $(pwd)/vars/ca-tree.yaml:/app/vars/ca-tree.yaml:ro \
+  -v $(pwd)/playbook.yaml:/app/playbook.yaml:ro \
+  khmarochos/pki \
+  ansible-playbook ./playbook.yaml --tags certificates
+
+# Generate Kubernetes secret
+docker run --rm \
+  -v $(pwd)/pki:/app/pki \
+  khmarochos/pki \
+  /app/scripts/make_secret.sh --pki-base /app/pki internal/web-server
+
+# Interactive shell for debugging
+docker run --rm -it \
+  -v $(pwd)/pki:/app/pki \
+  -v $(pwd)/vars/ca-tree.yaml:/app/vars/ca-tree.yaml:ro \
+  -v $(pwd)/playbook.yaml:/app/playbook.yaml:ro \
+  khmarochos/pki \
+  bash
 ```
 
 ## Kubernetes Integration

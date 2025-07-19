@@ -1,0 +1,48 @@
+---
+- name: PKI Management Playbook
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - vars/ca-tree.yaml
+    - vars/certificates.yaml
+
+  tasks:
+    - name: Initialize the PKI configuration dictionary
+      khmarochos.pki.init_dictionary:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+      register: configuration_dictionary
+      tags:
+        - always
+
+    - name: Retrieve the configuration dictionary result
+      set_fact:
+        configuration_dictionary: "{{ configuration_dictionary.result }}"
+      tags:
+        - always
+
+    - name: Initialize the PKI cascade
+      khmarochos.pki.init_pki:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        save_forced: false
+      register: pki_cascade
+      tags:
+        - always
+        - pki
+
+
+    - name: Issue or check all the certificates
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: "{{ cert_item.ca_nickname }}"
+        certificate_parameters: "{{ cert_item.certificate_parameters }}"
+      loop: "{{ certificate_parameters }}"
+      loop_control:
+        loop_var: cert_item
+        label: "{{ cert_item.certificate_parameters.nickname }}"
+      when: "'pki_only' not in ansible_run_tags"
+      register: certificate_results
+      tags:
+        - always
+        - certificates

@@ -1,0 +1,57 @@
+---
+# CA Tree Configuration Example
+# Copy this file to ca-tree.yaml and customize for your environment
+
+domain: "example.org"
+
+pki_cascade_configuration:
+  __propagated:
+    # Base directory for all PKI files
+    global_root_directory: "/app/pki"
+    
+    # Primary domain for certificates
+    domain: "example.com"
+    
+    # Certificate subject information
+    certificate_subject_country_name: "US"
+    certificate_subject_state_or_province_name: "California"
+    certificate_subject_locality_name: "San Francisco"
+    certificate_subject_organization_name: "Example Corporation"
+    certificate_subject_organizational_unit_name: "IT Department"
+    certificate_subject_email_address: "admin@${domain}"
+    
+    # Auto-generate secure passphrases
+    private_key_passphrase_random: true
+
+  # Root Certificate Authority
+  root:
+    __parameters:
+      name: "Root Certificate Authority (${domain})"
+      private_key_encrypted: true
+      private_key_size: 4096
+      certificate_term: 7300  # 20 years
+
+    # Intermediate CA for server certificates
+    server:
+      __parameters:
+        default: true
+        name: "Server Certificate Authority (${domain})"
+        private_key_encrypted: true
+        private_key_size: 2048
+        certificate_term: 3650  # 10 years
+
+    # Intermediate CA for client certificates
+    client:
+      __parameters:
+        name: "Client Certificate Authority (${domain})"
+        private_key_encrypted: true
+        private_key_size: 2048
+        certificate_term: 3650  # 10 years
+
+  # Separate CA for router/network devices
+  router:
+    __parameters:
+      name: "Router Certificate Authority (${domain})"
+      private_key_encrypted: false
+      private_key_size: 2048
+      certificate_term: 1825  # 5 years

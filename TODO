@@ -1,0 +1,39 @@
+It would be nice to have a script (scripts/state_dump.py) that would run through the current PKI directory, find all the certificate authorities and their own certificates and keys.
+The script should count on the assumption that own CA's certificates always reside in the `{CA's nickname}/certs/CA/{CA's nickname}.crt` file, their keys are in
+  `{CA's nickname}/private/CA/{CA's nickname}.key`, if the key is encrypted, the password resides in `{CA's nickname}/private/CA/{CA's nickname}.key_passphrase`).
+ The script should make a list of these CAs, also it should initialize an object of the `PKICA` class in for each CA and objects of the `Certificate` and `PrivateKey` classes for the CA's certificate and private key respectively. The certificates and keys must be loaded in memory from the files that are being found.
+ Also the script should find all the certificates issued by each CA and the key for each such certificate. They must be load into memory as objects of the `Certificate` and `PrivateKey` classes too.
+ Then the script should dump all the contents in a relatively big JSON structure containing all the information about the CAs' certificates and keys. Something like that:
+  {
+    "authorities": {
+      "root": {
+        "own_certificate_signing_request": { ... },
+        "own_certificate": { ... },
+        "own_private_key": { ... },
+        "issued_certificates": {
+          "zaloopa": {
+            "type": "server",
+            "own_certificate_signing_request": { ... },
+            "own_certificate": { ... },
+            "own_private_key": { ... }
+          },
+          "poebotina": {
+            "type": "client",
+            "own_certificate_signing_request": { ... },
+            "own_certificate": { ... },
+            "own_private_key": { ... }
+          }
+        }
+        "authorities": {
+          "intermediate": {
+            "own_certificate_signing_request": { ... },
+            "own_certificate": { ... },
+            "own_private_key": { ... },
+            "authorities": {
+              "realm666": { ... }
+            }
+          }
+        }
+      }
+    }
+  }

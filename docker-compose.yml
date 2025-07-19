@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  khmarochos-pki:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: khmarochos/pki:latest
+    container_name: khmarochos-pki
+    volumes:
+      # Mount your PKI directory tree
+      - ${PKI_DIR:-./pki}:/app/pki
+      # Mount your CA hierarchy configuration
+      - ${CA_TREE_CONFIG:-./vars/ca-tree.yaml}:/app/vars/ca-tree.yaml:ro
+      # Mount your certificate definitions
+      - ${CERTIFICATES_CONFIG:-./vars/certificates.yaml}:/app/vars/certificates.yaml:ro
+      # Mount your playbook
+      - ${PLAYBOOK_FILE:-./playbook.yaml}:/app/playbook.yaml:ro
+    environment:
+      # Ansible configuration
+      - ANSIBLE_HOST_KEY_CHECKING=False
+      - ANSIBLE_RETRY_FILES_ENABLED=False
+      - ANSIBLE_SSH_PIPELINING=True
+    working_dir: /app
+    # Container will run and exit after completing the playbook
+    # Add --rm to docker-compose up to remove container after run
+
+networks:
+  default:
+    name: khmarochos-pki-network
