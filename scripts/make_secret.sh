@@ -239,7 +239,7 @@ if [[ "${certificate_path}" == */* ]]; then
     # Format: ca_nickname/certificate_nickname
     ca_nickname_from_path="${certificate_path%%/*}"
     certificate_nickname="${certificate_path#*/}"
-    
+
     # If CA nickname not set via parameter, use the one from path
     if [[ -z "${ca_nickname}" ]]; then
         ca_nickname="${ca_nickname_from_path}"
@@ -247,7 +247,7 @@ if [[ "${certificate_path}" == */* ]]; then
 else
     # Format: just certificate_nickname
     certificate_nickname="${certificate_path}"
-    
+
     # CA nickname must be set via parameter
     if [[ -z "${ca_nickname}" ]]; then
         usage
@@ -330,7 +330,7 @@ if grep -q "ENCRYPTED" "${private_key_file}" 2>/dev/null; then
     if [[ -f "${passphrase_file}" ]]; then
         passphrase="$(<"${passphrase_file}")"
         # Decrypt the key
-	openssl rsa -in "${private_key_file}" -passin "pass:${passphrase}" 2>/dev/null | base64 -w 0 > "${private_key_encoded_file}"
+        openssl rsa -in "${private_key_file}" -passin "pass:${passphrase}" 2>/dev/null | base64 -w 0 > "${private_key_encoded_file}"
         if [[ $? -ne 0 ]]; then
             die 8 "Failed to decrypt private key: ${private_key_file}"
         fi
@@ -359,7 +359,7 @@ data:
   tls.key: $(<"${private_key_encoded_file}")
 EOF
 if [[ ${no_ca} -ne 1 ]]; then
-    cat <<EOF   
+    cat <<EOF
   ca.crt: $(<"${ca_certificate_encoded_file}")
 EOF
 fi
