@@ -1,0 +1,15 @@
+# Core dependencies for khmarochos.pki Ansible collection
+# Use pip-tools to compile: pip-compile requirements.in
+
+# Ansible core for module development
+ansible-core>=2.9
+
+# Cryptography library for PKI operations
+cryptography>=3.0
+
+# Development and testing dependencies (optional)
+# Uncomment the following lines if you need development tools:
+# pytest>=6.0
+# pytest-cov
+# flake8
+# black
