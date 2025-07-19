@@ -1,0 +1,38 @@
+---
+# Default variables for khmarochos.pki.cascade role
+
+# Skip package installation if set to true
+skip_packages: false
+
+# Default PKI cascade configuration
+# This should be overridden with your specific cascade structure
+pki_cascade_configuration:
+  global_root_directory: /opt/pki
+  cascade:
+    - nickname: example-root-ca
+      type: root
+      common_name: "Example Root CA"
+      country: US
+      state: ""
+      locality: ""
+      organization: "Example Organization"
+      organizational_unit: "IT Department"
+      key_size: 4096
+      validity_days: 7300  # 20 years
+      key_usage:
+        - key_cert_sign
+        - crl_sign
+    - nickname: example-intermediate-ca
+      type: intermediate
+      parent: example-root-ca
+      common_name: "Example Intermediate CA"
+      country: US
+      state: ""
+      locality: ""
+      organization: "Example Organization"
+      organizational_unit: "IT Department"
+      key_size: 2048
+      validity_days: 3650  # 10 years
+      key_usage:
+        - key_cert_sign
+        - crl_sign

@@ -14,6 +14,83 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+DOCUMENTATION = r'''
+---
+module: issue_everything
+short_description: Issue certificates with all required components
+description:
+    - Issues certificates along with private keys, CSRs, and passphrases.
+    - Handles bulk certificate issuance operations for a specific CA.
+    - Returns all generated components including certificates, private keys, CSRs, and passphrases.
+version_added: "1.0.0"
+options:
+    pki_ca_cascade:
+        description:
+            - Configuration dictionary for the PKI CA cascade structure.
+        required: true
+        type: dict
+    ca_nickname:
+        description:
+            - Nickname of the certificate authority to use for issuing.
+        required: true
+        type: str
+    certificate_parameters:
+        description:
+            - Parameters for certificate generation including subject, extensions, and key specifications.
+        required: true
+        type: dict
+    hide_passphrase_value:
+        description:
+            - Whether to hide passphrase values in the output.
+        required: false
+        type: bool
+        default: true
+author:
+    - Volodymyr Melnyk
+'''
+
+EXAMPLES = r'''
+- name: Issue a server certificate
+  khmarochos.pki.issue_everything:
+    pki_ca_cascade:
+      global_root_directory: /etc/pki
+      ca_cascade:
+        - nickname: intermediate-ca
+          certificate_type: intermediate_ca
+    ca_nickname: intermediate-ca
+    certificate_parameters:
+      certificate_nickname: web-server
+      subject:
+        common_name: example.com
+      extensions:
+        - server_auth
+        - client_auth
+'''
+
+RETURN = r'''
+result:
+    description: All generated PKI components
+    returned: always
+    type: dict
+    contains:
+        certificate:
+            description: Certificate properties
+            type: dict
+        certificate_signing_request:
+            description: CSR properties
+            type: dict
+        private_key:
+            description: Private key properties
+            type: dict
+        passphrase:
+            description: Passphrase properties (value may be hidden)
+            type: dict
+changed:
+    description: Whether any changes were made
+    returned: always
+    type: bool
+'''
+
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker \

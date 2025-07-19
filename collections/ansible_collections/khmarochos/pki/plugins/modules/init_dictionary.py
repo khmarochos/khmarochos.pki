@@ -14,6 +14,49 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+DOCUMENTATION = r'''
+---
+module: init_dictionary
+short_description: Initialize PKI dictionary structures
+description:
+    - Creates and validates PKI dictionary structures for certificate authority cascades.
+    - This module parses the PKI cascade configuration and returns the resulting dictionary structure.
+version_added: "1.0.0"
+options:
+    pki_ca_cascade:
+        description:
+            - Configuration dictionary for the PKI CA cascade structure.
+        required: true
+        type: dict
+author:
+    - Volodymyr Melnyk
+'''
+
+EXAMPLES = r'''
+- name: Initialize PKI dictionary
+  khmarochos.pki.init_dictionary:
+    pki_ca_cascade:
+      global_root_directory: /etc/pki
+      ca_cascade:
+        - nickname: root-ca
+          certificate_type: root_ca
+'''
+
+RETURN = r'''
+result:
+    description: PKI cascade JSON structure
+    returned: always
+    type: dict
+    sample:
+        ca_cascade:
+          - nickname: root-ca
+            certificate_type: root_ca
+changed:
+    description: Whether any changes were made
+    returned: always
+    type: bool
+'''
+
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker import ChangesStack

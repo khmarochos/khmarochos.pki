@@ -14,6 +14,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+DOCUMENTATION = r'''
+---
+module: init_pki
+short_description: Initialize PKI infrastructure and CA cascades
+description:
+    - Sets up PKI infrastructure by creating certificate authority cascades.
+    - Creates directory structures, generates private keys, and issues CA certificates.
+    - Supports loading existing PKI structures and saving new ones.
+version_added: "1.0.0"
+options:
+    pki_ca_cascade:
+        description:
+            - Configuration dictionary for the PKI CA cascade structure.
+        required: true
+        type: dict
+    load_if_exists:
+        description:
+            - Whether to load existing PKI structures if they exist.
+        required: false
+        type: bool
+        default: true
+    save_if_needed:
+        description:
+            - Whether to save PKI structures when needed.
+        required: false
+        type: bool
+        default: true
+    save_forced:
+        description:
+            - Whether to force saving of PKI structures.
+        required: false
+        type: bool
+        default: false
+author:
+    - Volodymyr Melnyk
+'''
+
+EXAMPLES = r'''
+- name: Initialize PKI infrastructure
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      global_root_directory: /etc/pki
+      ca_cascade:
+        - nickname: root-ca
+          certificate_type: root_ca
+        - nickname: intermediate-ca
+          certificate_type: intermediate_ca
+          issuer: root-ca
+    load_if_exists: true
+    save_if_needed: true
+'''
+
+RETURN = r'''
+result:
+    description: PKI cascade JSON structure with created components
+    returned: always
+    type: dict
+    sample:
+        ca_cascade:
+          - nickname: root-ca
+            certificate_type: root_ca
+changed:
+    description: Whether any changes were made to the PKI structure
+    returned: always
+    type: bool
+'''
+
 from ansible.module_utils.basic import AnsibleModule
 
 from ansible_collections.khmarochos.pki.plugins.module_utils.change_tracker \
