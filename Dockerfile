@@ -10,6 +10,10 @@ ENV ANSIBLE_HOST_KEY_CHECKING=False
 ENV ANSIBLE_RETRY_FILES_ENABLED=False
 ENV ANSIBLE_SSH_PIPELINING=True
 ENV ANSIBLE_COLLECTIONS_PATH=/app/collections
+ENV PLAYBOOK_FILE=/app/playbook.yaml
+ENV CA_TREE_FILE=/app/vars/ca-tree.yaml
+ENV CERTIFICATES_FILE=/app/vars/certificates.yaml
+ENV PKI_STATE_DIR=
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

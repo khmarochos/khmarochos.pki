@@ -148,6 +148,54 @@ class PKIStateDumper:
             self.logger.error(f"Failed to load CA {ca_nickname}: {e}")
             return None
     
+    def should_skip_chain_file(self, chain_file: Path, cert_dir: Path) -> bool:
+        """Check if a chain file should be skipped because it duplicates a standalone certificate"""
+        # Extract base name (e.g., "example.chain.crt" -> "example")
+        if not chain_file.name.endswith('.chain.crt'):
+            return False
+            
+        base_name = chain_file.name.replace('.chain.crt', '')
+        standalone_file = cert_dir / f"{base_name}.crt"
+        
+        if not standalone_file.exists():
+            return False
+            
+        try:
+            # Load the first certificate from the chain file
+            with open(chain_file, 'r') as f:
+                chain_content = f.read()
+            
+            # Extract the first certificate from the chain (between first BEGIN and first END)
+            begin_marker = "-----BEGIN CERTIFICATE-----"
+            end_marker = "-----END CERTIFICATE-----"
+            
+            begin_pos = chain_content.find(begin_marker)
+            if begin_pos == -1:
+                return False
+                
+            end_pos = chain_content.find(end_marker, begin_pos)
+            if end_pos == -1:
+                return False
+                
+            first_cert_pem = chain_content[begin_pos:end_pos + len(end_marker)]
+            
+            # Load the standalone certificate
+            with open(standalone_file, 'r') as f:
+                standalone_content = f.read().strip()
+            
+            # Compare the certificates (normalize whitespace)
+            first_cert_normalized = '\n'.join(line.strip() for line in first_cert_pem.split('\n') if line.strip())
+            standalone_normalized = '\n'.join(line.strip() for line in standalone_content.split('\n') if line.strip())
+            
+            if first_cert_normalized == standalone_normalized:
+                self.logger.debug(f"Skipping chain file {chain_file.name} - duplicates {standalone_file.name}")
+                return True
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to compare {chain_file.name} with {standalone_file.name}: {e}")
+            
+        return False
+
     def discover_issued_certificates(self, ca: PKICA) -> Dict[str, Dict[str, Any]]:
         """Discover all certificates issued by a CA"""
         issued_certs = {}
@@ -160,6 +208,10 @@ class PKIStateDumper:
                 for cert_file in cert_path.glob("*.crt"):
                     # Skip the CA's own certificate
                     if cert_file.name == f"{ca.nickname}.crt":
+                        continue
+                    
+                    # Skip chain files that duplicate standalone certificates
+                    if self.should_skip_chain_file(cert_file, cert_path):
                         continue
                         
                     cert_nickname = cert_file.stem

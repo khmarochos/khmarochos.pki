@@ -1,47 +1,75 @@
 pki_cascade_configuration:
   __propagated:
-    global_root_directory: "/tmp/pki"
-    domain: "test.kloudster.net"
+    global_root_directory: "/tmp/khmarochos.pki"
+    domain: "test.local"
     certificate_subject_country_name: PL
     certificate_subject_state_or_province_name: Malopolskie
     certificate_subject_locality_name: Krakow
     certificate_subject_organization_name: TUCHA SPOLKA Z OGRANICZONA ODPOWIEDZIALNOSCIA
     certificate_subject_organizational_unit_name: Security Service
     certificate_subject_email_address: security@kloudster.net
-    private_key_passphrase_random: true
+    private_key_encrypted: false
   root:
     __parameters:
-      name: Root Certificate Authority (${domain})
-      private_key_encrypted: true
+      name: Root CA (${domain})
       private_key_size: 4096
+      private_key_encrypted: true
+      private_key_passphrase_random: true
       strict: false
       stubby: false
-    intermediate:
+    intermediate-alpha:
       __parameters:
         default: true
-        name: Intermediate Certificate Authority (${domain})
-        private_key_encrypted: true
+        name: Alpha Intermediate CA (${domain})
         private_key_size: 2048
+        private_key_encrypted: true
+        private_key_passphrase_random: true
         strict: false
         stubby: false
       pfsense:
         __parameters:
-          name: pfSense Router Certificate Authority (${domain})
-          private_key_encrypted: false
+          name: pfSense CA (${domain})
           private_key_size: 2048
           strict: true
           stubby: false
-    elastic:
+    intermediate-bravo:
       __parameters:
-        name: Elastic Certificate Authority (${domain})
-        private_key_encrypted: false
+        name: Bravo Intermediate CA (${domain})
         private_key_size: 2048
-        strict: false
-        stubby: true
+        strict: true
+        stubby: false
+      postgresql:
+        __parameters:
+          name: PostgreSQL Cluster CA (${domain})
+          private_key_size: 2048
+          strict: true
+          stubby: true
+      redis:
+        __parameters:
+          name: Redis Cluster CA (${domain})
+          private_key_encrypted: false
+          private_key_size: 2048
+          strict: true
+          stubby: true
+      elastic:
+        __parameters:
+          name: Elastic Stack CA (${domain})
+          private_key_encrypted: false
+          private_key_size: 2048
+          strict: true
+          stubby: true
+  intermediate-charlie:
+    __parameters:
+      name: Charlie Intermediate CA (${domain})
+      private_key_encrypted: true
+      private_key_passphrase: "jUsTaSaMpLePaSsPhRaSe"
+      private_key_passphrase_random: false
+      private_key_size: 2048
+      strict: true
+      stubby: true
   kubernetes:
     __parameters:
-      name: Kubernetes Cluster Certificate Authority (${domain})
-      private_key_encrypted: false
+      name: Kubernetes Cluster CA (${domain})
       private_key_size: 2048
-      strict: false
+      strict: true
       stubby: false
