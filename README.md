@@ -15,6 +15,7 @@ A comprehensive Ansible collection for managing Public Key Infrastructure (PKI) 
 - [Modules](#modules)
 - [Examples](#examples)
 - [Kubernetes Integration](#kubernetes-integration)
+- [PKI State Management](#pki-state-management)
 - [Directory Structure](#directory-structure)
 - [Security Considerations](#security-considerations)
 - [Troubleshooting](#troubleshooting)
@@ -535,6 +536,164 @@ data:
   tls.crt: LS0tLS1CRUdJTi... (base64 encoded certificate)
   tls.key: LS0tLS1CRUdJTi... (base64 encoded private key)
   ca.crt: LS0tLS1CRUdJTi... (base64 encoded CA certificate)
+```
+
+## PKI State Management
+
+The collection includes powerful tools for monitoring and comparing your PKI infrastructure state over time.
+
+### State Dumping
+
+Capture the complete state of your PKI infrastructure:
+
+```bash
+# Dump current PKI state to JSON
+python scripts/state_dump.py /opt/pki > /tmp/pki_state/current.json
+
+# Dump with verbose logging
+python scripts/state_dump.py -v /opt/pki -o /tmp/pki_state/current.json
+```
+
+The state dump includes comprehensive information about:
+- **Certificate Authorities**: Hierarchical CA structure with full certificate chains
+- **Certificates**: All CA and end-entity certificates with detailed metadata
+- **Private Keys**: Key information, encryption status, and file metadata  
+- **CSRs**: Certificate Signing Requests with extensions and key details
+- **File Information**: Sizes, permissions, modification times for all PKI files
+
+### State Comparison
+
+Compare two PKI states to identify what changed between deployments:
+
+```bash
+# Compare states and show differences
+python scripts/state_compare.py \
+    /tmp/pki_state/before.json \
+    /tmp/pki_state/after.json
+
+# Force colored output (useful for CI/CD)
+python scripts/state_compare.py --color before.json after.json
+
+# Disable colors for text output
+python scripts/state_compare.py --no-color before.json after.json > changes.txt
+```
+
+#### Sample Output
+
+```
+[:] Certificate Authorities (2)
+├── root-ca
+│   ├── [:] Certificate
+│   │   ├── [+] Serial: 1234567890ABCDEF
+│   │   ├── [:] Subject  
+│   │   │   ├── [·] CN: Root CA
+│   │   │   ├── [·] O: Example Corp
+│   │   │   └── [·] C: US
+│   │   ├── [:] SANs
+│   │   │   └── [+] DNS:ca.example.com
+│   │   └── [:] File
+│   │       ├── [·] Path: /opt/pki/root-ca/certs/CA/root-ca.crt
+│   │       ├── [+] Size: 1234 bytes
+│   │       └── [·] Permissions: 644
+│   └── [:] Private Key
+│       ├── [·] Type & Size: 4096-bit RSA
+│       └── [:] File
+│           └── [+] Modified: 2024-07-21T10:30:45
+└── intermediate-ca
+    └── [... similar structure]
+
+Summary:
+  Certificate Authorities: 4 (+2 ~1 -1)
+  Certificates: 15 (+8 ~3 -2)
+  Private Keys: 15 (+8 ~1 -2)
+  Certificate Signing Requests: 12 (+7 ~2 -1)
+  Total changes: 46
+```
+
+#### Change Markers
+
+| Marker | Meaning | Color |
+|--------|---------|-------|
+| `[+]` | Added | Green |
+| `[-]` | Removed | Red |
+| `[~]` | Changed | Yellow |
+| `[·]` | Unchanged | White |
+| `[:]` | Header | White Bold |
+
+### Use Cases
+
+#### Deployment Verification
+```bash
+# Before deployment
+python scripts/state_dump.py /opt/pki > pre-deployment.json
+
+# After deployment  
+python scripts/state_dump.py /opt/pki > post-deployment.json
+
+# Verify changes
+python scripts/state_compare.py pre-deployment.json post-deployment.json
+```
+
+#### Certificate Renewal Tracking
+```bash
+# Weekly PKI state snapshots
+python scripts/state_dump.py /opt/pki > "pki-state-$(date +%Y%m%d).json"
+
+# Compare with previous week
+python scripts/state_compare.py pki-state-20240714.json pki-state-20240721.json
+```
+
+#### Audit Trail
+```bash
+# Generate detailed audit report
+python scripts/state_compare.py \
+    --color \
+    baseline.json current.json > audit-report.txt
+
+# Include in CI/CD pipeline
+if python scripts/state_compare.py expected.json actual.json; then
+    echo "✓ PKI state matches expectations"
+else
+    echo "✗ PKI state differs - review changes above"
+    exit 1
+fi
+```
+
+### Integration with Automation
+
+#### Ansible Playbook Integration
+```yaml
+- name: Capture PKI state before changes
+  shell: python scripts/state_dump.py {{ pki_root_dir }}
+  register: pki_state_before
+
+- name: Apply PKI changes
+  khmarochos.pki.init_pki:
+    pki_ca_cascade: "{{ pki_configuration }}"
+
+- name: Capture PKI state after changes  
+  shell: python scripts/state_dump.py {{ pki_root_dir }}
+  register: pki_state_after
+
+- name: Show PKI changes
+  shell: |
+    echo "{{ pki_state_before.stdout }}" > /tmp/before.json
+    echo "{{ pki_state_after.stdout }}" > /tmp/after.json
+    python scripts/state_compare.py /tmp/before.json /tmp/after.json
+```
+
+#### GitOps Workflow
+```bash
+#!/bin/bash
+# Save state to Git for tracking
+DATE=$(date +%Y%m%d-%H%M)
+python scripts/state_dump.py /opt/pki > "states/pki-${DATE}.json"
+git add "states/pki-${DATE}.json"
+git commit -m "PKI state snapshot: ${DATE}"
+
+# Compare with previous state
+PREV_STATE=$(ls states/pki-*.json | tail -2 | head -1)
+python scripts/state_compare.py "${PREV_STATE}" "states/pki-${DATE}.json"
 ```
 
 ## Directory Structure
