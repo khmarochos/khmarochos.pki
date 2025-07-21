@@ -233,26 +233,32 @@ class StateComparator:
             print()  # Empty line between sections
     
     def print_single_difference(self, diff: Dict[str, Any]) -> None:
-        """Print a single difference"""
+        """Print a single difference with detailed formatting for PKI objects"""
         diff_type = diff['type']
         path = diff['path']
         
         if diff_type == 'added':
-            print(self.colorize(f"+ {path}: {self.format_value(diff['value'])}", Colors.GREEN))
+            formatted_value = self.format_pki_value_for_display(diff['value'], path)
+            print(self.colorize(f"+ {path}: {formatted_value}", Colors.GREEN))
             
         elif diff_type == 'removed':
-            print(self.colorize(f"- {path}: {self.format_value(diff['value'])}", Colors.RED))
+            formatted_value = self.format_pki_value_for_display(diff['value'], path)
+            print(self.colorize(f"- {path}: {formatted_value}", Colors.RED))
             
         elif diff_type == 'value_change':
-            print(self.colorize(f"- {path}: {self.format_value(diff['old_value'])}", Colors.RED))
-            print(self.colorize(f"+ {path}: {self.format_value(diff['new_value'])}", Colors.GREEN))
+            old_formatted = self.format_pki_value_for_display(diff['old_value'], path)
+            new_formatted = self.format_pki_value_for_display(diff['new_value'], path)
+            print(self.colorize(f"- {path}: {old_formatted}", Colors.RED))
+            print(self.colorize(f"+ {path}: {new_formatted}", Colors.GREEN))
             
         elif diff_type == 'type_change':
             old_type = diff['old_type']
             new_type = diff['new_type']
             print(self.colorize(f"~ {path}: type changed from {old_type} to {new_type}", Colors.YELLOW))
-            print(self.colorize(f"- {path}: {self.format_value(diff['old_value'])}", Colors.RED))
-            print(self.colorize(f"+ {path}: {self.format_value(diff['new_value'])}", Colors.GREEN))
+            old_formatted = self.format_pki_value_for_display(diff['old_value'], path)
+            new_formatted = self.format_pki_value_for_display(diff['new_value'], path)
+            print(self.colorize(f"- {path}: {old_formatted}", Colors.RED))
+            print(self.colorize(f"+ {path}: {new_formatted}", Colors.GREEN))
     
     def print_summary(self) -> None:
         """Print a summary of changes"""
@@ -342,29 +348,773 @@ class StateComparator:
         
         serial = cert_info.get('serial_number', 'Unknown Serial')
         not_after = cert_info.get('not_valid_after', '')
+        validity_status = ""
         if not_after:
-            # Simplify the date format
+            # Simplify the date format and check validity
             try:
-                from datetime import datetime
+                from datetime import datetime, timezone
                 dt = datetime.fromisoformat(not_after.replace('Z', '+00:00'))
-                not_after = dt.strftime('%Y-%m-%d')
+                not_after_str = dt.strftime('%Y-%m-%d')
+                
+                # Check if certificate is expiring soon or expired
+                now = datetime.now(timezone.utc)
+                days_until_expiry = (dt - now).days
+                
+                if days_until_expiry < 0:
+                    validity_status = " [EXPIRED]"
+                elif days_until_expiry <= 30:
+                    validity_status = f" [EXPIRES IN {days_until_expiry} DAYS]"
+                    
+                not_after = not_after_str
             except:
                 pass
         
-        return f"{cn} (Serial: {serial[:8]}{'...' if len(serial) > 8 else ''}, Expires: {not_after})"
+        # Add certificate type information
+        cert_type_info = ""
+        cert_type = cert_info.get('cert_type', '')
+        is_self_signed = cert_info.get('is_self_signed', False)
+        if cert_type:
+            if is_self_signed:
+                cert_type_info = f", {cert_type.upper()} [SELF-SIGNED]"
+            else:
+                cert_type_info = f", {cert_type.upper()}"
+        
+        # Add key information
+        key_info = ""
+        key_size = cert_info.get('public_key_size')
+        sig_alg = cert_info.get('signature_algorithm', '')
+        if key_size:
+            key_info = f", {key_size}-bit"
+        if sig_alg:
+            key_info += f" {sig_alg}"
+        
+        # Add subject alternative names if available
+        san_info = ""
+        sans = cert_info.get('subject_alternative_names', [])
+        if sans:
+            san_count = len(sans)
+            if san_count <= 3:
+                san_info = f", SANs: {', '.join(sans)}"
+            else:
+                san_info = f", SANs: {', '.join(sans[:3])} (+{san_count-3} more)"
+        
+        # Add key usage information
+        usage_info = ""
+        key_usage = cert_info.get('key_usage', [])
+        ext_key_usage = cert_info.get('extended_key_usage', [])
+        
+        usage_parts = []
+        if key_usage:
+            usage_parts.append(f"KeyUsage: {', '.join(key_usage)}")
+        if ext_key_usage:
+            usage_parts.append(f"ExtKeyUsage: {', '.join(ext_key_usage)}")
+        if usage_parts:
+            usage_info = f", {'; '.join(usage_parts)}"
+        
+        return f"{cn} (Serial: {serial[:8]}{'...' if len(serial) > 8 else ''}, Expires: {not_after}{validity_status}{cert_type_info}{key_info}{san_info}{usage_info})"
+    
+    def format_pki_value_for_display(self, value: Any, path: str, max_length: int = 200) -> str:
+        """Format PKI-specific values with detailed information"""
+        # Check if this is a certificate, private key, or CSR based on the path and value
+        if isinstance(value, dict):
+            if 'subject' in value and 'issuer' in value and 'serial_number' in value:
+                # This is a certificate
+                return self.format_detailed_certificate_info(value)
+            elif 'size' in value and 'public_exponent' in value and 'encrypted' in value:
+                # This is a private key
+                return self.format_detailed_private_key_info(value)
+            elif 'subject' in value and 'signature_algorithm' in value and 'public_key_size' in value and 'issuer' not in value:
+                # This is a CSR
+                return self.format_detailed_csr_info(value)
+            else:
+                # Regular dictionary formatting
+                json_str = json.dumps(value, separators=(',', ':'))
+                if len(json_str) > max_length:
+                    return json_str[:max_length] + "..."
+                return json_str
+        else:
+            return self.format_value(value, max_length)
+    
+    def format_detailed_certificate_info(self, cert_info: Dict[str, Any]) -> str:
+        """Format detailed certificate information for diff display"""
+        if 'error' in cert_info:
+            return f"[ERROR: {cert_info.get('error', 'Unknown error')}]"
+        
+        parts = []
+        
+        # Subject and issuer
+        subject = cert_info.get('subject', 'Unknown Subject')
+        issuer = cert_info.get('issuer', 'Unknown Issuer')
+        parts.append(f"Subject: {subject}")
+        if subject != issuer:
+            parts.append(f"Issuer: {issuer}")
+        else:
+            parts.append("[Self-signed]")
+        
+        # Serial and validity
+        serial = cert_info.get('serial_number', 'Unknown')
+        parts.append(f"Serial: {serial}")
+        
+        not_before = cert_info.get('not_valid_before', '')
+        not_after = cert_info.get('not_valid_after', '')
+        if not_before and not_after:
+            try:
+                from datetime import datetime, timezone
+                before_dt = datetime.fromisoformat(not_before.replace('Z', '+00:00'))
+                after_dt = datetime.fromisoformat(not_after.replace('Z', '+00:00'))
+                validity = f"{before_dt.strftime('%Y-%m-%d')} to {after_dt.strftime('%Y-%m-%d')}"
+                
+                # Check validity status
+                now = datetime.now(timezone.utc)
+                if now > after_dt:
+                    validity += " [EXPIRED]"
+                elif (after_dt - now).days <= 30:
+                    validity += f" [EXPIRES IN {(after_dt - now).days} DAYS]"
+                    
+                parts.append(f"Validity: {validity}")
+            except:
+                if not_after:
+                    parts.append(f"Expires: {not_after}")
+        
+        # Key information
+        key_size = cert_info.get('public_key_size')
+        sig_alg = cert_info.get('signature_algorithm', '')
+        if key_size and sig_alg:
+            parts.append(f"Key: {key_size}-bit {sig_alg}")
+        
+        # Fingerprint
+        fingerprint = cert_info.get('fingerprint_sha256', '')
+        if fingerprint:
+            parts.append(f"SHA256: {fingerprint[:16]}...")
+        
+        return "; ".join(parts)
+    
+    def format_detailed_private_key_info(self, key_info: Dict[str, Any]) -> str:
+        """Format detailed private key information for diff display"""
+        if 'error' in key_info:
+            return f"[ERROR: {key_info.get('error', 'Unknown error')}]"
+        
+        parts = []
+        
+        # Key size and type
+        size = key_info.get('size')
+        if size:
+            parts.append(f"{size}-bit RSA")
+        
+        # Encryption status
+        encrypted = key_info.get('encrypted', False)
+        if encrypted:
+            parts.append("[ENCRYPTED]")
+        else:
+            parts.append("[UNENCRYPTED]")
+        
+        # Public exponent
+        pub_exp = key_info.get('public_exponent')
+        if pub_exp:
+            parts.append(f"PublicExp: {pub_exp}")
+        
+        # File location
+        file_path = key_info.get('file', '')
+        if file_path:
+            import os
+            parts.append(f"File: {os.path.basename(file_path)}")
+        
+        # Modulus (truncated)
+        modulus = key_info.get('public_modulus', '')
+        if modulus:
+            modulus_str = str(modulus)
+            if len(modulus_str) > 32:
+                parts.append(f"Modulus: {modulus_str[:16]}...{modulus_str[-16:]}")
+            else:
+                parts.append(f"Modulus: {modulus_str}")
+        
+        return "; ".join(parts)
+    
+    def format_file_size(self, file_size: int) -> str:
+        """Format file size in a human-readable way"""
+        if file_size >= 1024:
+            size_kb = file_size / 1024
+            if size_kb >= 1024:
+                size_mb = size_kb / 1024
+                return f"{size_mb:.2f} MB ({file_size:,} bytes)"
+            else:
+                return f"{size_kb:.2f} KB ({file_size:,} bytes)"
+        else:
+            return f"{file_size} bytes"
+
+    def format_datetime(self, datetime_str: str, with_days_remaining: bool = False) -> str:
+        """Format datetime string consistently"""
+        try:
+            from datetime import datetime, timezone
+            # Parse the datetime string
+            if datetime_str.endswith('Z'):
+                dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+            elif '+' in datetime_str or datetime_str.endswith('UTC'):
+                dt = datetime.fromisoformat(datetime_str.replace('Z', '+00:00'))
+            else:
+                # Assume naive datetime is UTC
+                dt = datetime.fromisoformat(datetime_str)
+                dt = dt.replace(tzinfo=timezone.utc)
+            
+            formatted = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            
+            if with_days_remaining:
+                now = datetime.now(timezone.utc)
+                days_remaining = (dt - now).days
+                if dt > now:
+                    formatted += f" [expires in {days_remaining} days]"
+                else:
+                    formatted += " [EXPIRED]"
+            
+            return formatted
+        except Exception as e:
+            # Fallback formatting - preserve original behavior but log what went wrong
+            fallback = datetime_str[:19] + ' UTC' if len(datetime_str) >= 19 else datetime_str + ' UTC'
+            if with_days_remaining:
+                fallback += " [DATE PARSE ERROR]"
+            return fallback
+
+    def extract_file_details(self, obj_info: Dict[str, Any]) -> List[Tuple[str, str]]:
+        """Extract common file details (name, size, permissions, modified time)"""
+        details = []
+        
+        file_path = obj_info.get('file', '')
+        if file_path:
+            import os
+            details.append(('File Name', os.path.basename(file_path)))
+
+            # File size
+            file_size = obj_info.get('file_size')
+            if file_size:
+                details.append(('File Size', self.format_file_size(file_size)))
+            
+            # File permissions
+            file_perms = obj_info.get('file_permissions')
+            if file_perms:
+                details.append(('File Permissions', file_perms))
+            
+            # Last modified time
+            last_modified = obj_info.get('last_modified')
+            if last_modified:
+                details.append(('File Modified', self.format_datetime(last_modified)))
+        
+        return details
+
+    def print_file_info_tree(self, obj_info: Dict[str, Any], base_path: str, indent: str) -> None:
+        """Print file information as tree branches at the end of entity details"""
+        file_path = obj_info.get('file', '')
+        if not file_path:
+            return
+            
+        import os
+        filename = os.path.basename(file_path)
+        
+        # Print "File" as main branch with [:] marker (header style)
+        file_branch_path = f"{base_path} -> file"
+        file_marker = self.get_change_marker_for_path(file_branch_path)
+        
+        # Use [:] for unchanged files, otherwise use change marker
+        if file_marker in ['+', '-', '~']:
+            file_color = self.get_change_color_for_path(file_branch_path)
+            file_display = f"[{file_marker}] File"
+        else:
+            file_color = Colors.BOLD + Colors.WHITE
+            file_display = f"[:] File"
+        
+        file_display = self.colorize(file_display, file_color)
+        print(f"{indent}└──{file_display}")
+        
+        # Print file details as sub-branches
+        file_details = []
+        
+        # File name
+        file_details.append(('name', filename))
+        
+        # Full absolute path
+        file_details.append(('path', file_path))
+        
+        # File size
+        file_size = obj_info.get('file_size')
+        if file_size is not None:
+            file_details.append(('size', self.format_file_size(file_size)))
+        
+        # File permissions in octal format
+        file_perms = obj_info.get('file_permissions')
+        if file_perms:
+            # Convert to octal format if it's not already
+            if file_perms.startswith('0o') or file_perms.startswith('0'):
+                octal_perms = file_perms
+            else:
+                # Assume it's a string like "rw-r--r--" and try to convert
+                try:
+                    # If it looks like Unix permissions, convert to octal
+                    if len(file_perms) == 9 and all(c in 'rwx-' for c in file_perms):
+                        octal_val = 0
+                        for i, perm in enumerate(file_perms):
+                            if perm != '-':
+                                octal_val |= (1 << (8 - i))
+                        octal_perms = f"0o{oct(octal_val)[2:]:0>3}"
+                    else:
+                        octal_perms = file_perms
+                except:
+                    octal_perms = file_perms
+            file_details.append(('permissions', octal_perms))
+        
+        # Last modified time
+        last_modified = obj_info.get('last_modified')
+        if last_modified:
+            file_details.append(('modified', self.format_datetime(last_modified)))
+        
+        # Print each detail as a sub-branch
+        sub_indent = indent + "    "
+        for i, (detail_type, detail_value) in enumerate(file_details):
+            is_last_detail = (i == len(file_details) - 1)
+            detail_path = f"{file_branch_path} -> {detail_type}"
+            detail_marker = self.get_change_marker_for_path(detail_path)
+            detail_color = self.get_change_color_for_path(detail_path)
+            
+            detail_display = f"[{detail_marker}] {detail_type.title()}: {detail_value}"
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+            
+            branch_symbol = "└──" if is_last_detail else "├──"
+            print(f"{sub_indent}{branch_symbol}{detail_display}")
+
+    def print_details_with_file_info(self, details: List[Tuple[str, str]], obj_info: Dict[str, Any], base_path: str, indent: str) -> None:
+        """Print entity details followed by file information with correct tree structure"""
+        has_file_info = bool(obj_info.get('file'))
+        
+        # Print regular details
+        for i, (label, value) in enumerate(details):
+            is_last_detail = (i == len(details) - 1)
+            detail_path = f"{base_path} -> {label.lower().replace(' ', '_').replace('&', 'and')}"
+            detail_marker = self.get_change_marker_for_path(detail_path)
+            detail_color = self.get_change_color_for_path(detail_path)
+            
+            # If this is the last detail AND there's file info, use junction (├) not corner (└)
+            if is_last_detail and has_file_info:
+                branch = "├──"
+            else:
+                branch = "└──" if is_last_detail else "├──"
+            
+            detail_display = f"[{detail_marker}] {label}: {value}"
+            
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+            
+            print(f"{indent}{branch}{detail_display}")
+        
+        # Print file information if it exists
+        if has_file_info:
+            self.print_file_info_tree(obj_info, base_path, indent)
+
+    def print_details_tree(self, details: List[Tuple[str, str]], base_path: str, indent: str) -> None:
+        """Print a list of details as tree sub-elements with proper formatting"""
+        for i, (label, value) in enumerate(details):
+            is_last = (i == len(details) - 1)
+            detail_path = f"{base_path} -> {label.lower().replace(' ', '_').replace('&', 'and')}"
+            detail_marker = self.get_change_marker_for_path(detail_path)
+            detail_color = self.get_change_color_for_path(detail_path)
+            
+            branch = "└──" if is_last else "├──"
+            detail_display = f"[{detail_marker}] {label}: {value}"
+            
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+            
+            print(f"{indent}{branch}{detail_display}")
+
+    def format_tree_item(self, marker: str, label: str, count: int = None) -> str:
+        """Format a tree item with marker and optional count"""
+        if count is not None:
+            return f"[{marker}] {label} ({count})"
+        else:
+            return f"[{marker}] {label}"
+
+    def get_tree_branch(self, indent: str, is_last: bool) -> Tuple[str, str]:
+        """Get the appropriate tree branch symbols and next indent level"""
+        if indent == "":
+            branch = " ├──" if not is_last else " └──"
+            next_indent = " │   " if not is_last else "     "
+        else:
+            branch = indent + ("├──" if not is_last else "└──")
+            next_indent = indent + ("│   " if not is_last else "    ")
+        return branch, next_indent
+
+    def format_tree_node(self, path: str, label: str, color: str = None) -> str:
+        """Format a tree node with marker and color"""
+        marker = self.get_change_marker_for_path(path)
+        node_color = self.get_change_color_for_path(path) if marker in ['+', '-', '~'] else (color or Colors.RESET)
+        display = f"[{marker}] {label}"
+        return self.colorize(display, node_color) if node_color != Colors.RESET else display
+
+    def format_sub_header_node(self, path: str, label: str) -> str:
+        """Format a sub-header node (Certificate, CSR, Private Key) with [:] marker and white-bold color"""
+        marker = self.get_change_marker_for_path(path)
+        # Use change color if there's a change, otherwise use white-bold
+        if marker in ['+', '-', '~']:
+            node_color = self.get_change_color_for_path(path)
+        else:
+            marker = ":"  # Use colon for unchanged sub-headers
+            node_color = Colors.BOLD + Colors.WHITE
+        
+        display = f"[{marker}] {label}"
+        return self.colorize(display, node_color)
+
+    def print_tree_section(self, indent: str, is_last: bool, path: str, label: str, count: int = None, default_color: str = Colors.BOLD + Colors.WHITE):
+        """Print a tree section header with formatting"""
+        section_marker = self.get_change_marker_for_path(path)
+        section_color = self.get_change_color_for_path(path) if section_marker in ['+', '-', '~'] else default_color
+        display = self.format_tree_item(section_marker if section_marker in ['+', '-', '~'] else ":", label, count)
+        
+        branch = indent + ("└──" if is_last else "├──")
+        print(f"{branch}{self.colorize(display, section_color)}")
+        
+        return indent + ("    " if is_last else "│   ")
+
+    def process_sub_items(self, cert_data: Dict[str, Any], cert_path: str, cert_details_indent: str):
+        """Process and display sub-items (certificate, CSR, private key) for an issued certificate"""
+        sub_items = []
+        cert_info = cert_data.get('certificate')
+        csr_info = cert_data.get('certificate_signing_request')  
+        private_key_info = cert_data.get('private_key')
+        
+        if cert_info:
+            sub_items.append(('certificate', cert_info, 'Certificate'))
+        if csr_info:
+            sub_items.append(('csr', csr_info, 'Certificate Signing Request'))
+        if private_key_info:
+            sub_items.append(('private_key', private_key_info, 'Private Key'))
+
+        for sub_idx, (sub_type, sub_data, sub_label) in enumerate(sub_items):
+            is_last_sub = (sub_idx == len(sub_items) - 1)
+            sub_path = f"{cert_path} -> {sub_type}"
+            
+            sub_display = self.format_sub_header_node(sub_path, sub_label)
+            sub_branch = cert_details_indent + ("└──" if is_last_sub else "├──")
+            print(f"{sub_branch}{sub_display}")
+            
+            # Print details as sub-sub-elements
+            sub_detail_indent = cert_details_indent + ("    " if is_last_sub else "│   ")
+            if sub_type == 'certificate':
+                self.print_certificate_details(sub_data, sub_path, sub_detail_indent)
+            elif sub_type == 'private_key':
+                self.print_private_key_details(sub_data, sub_path, sub_detail_indent)
+            elif sub_type == 'csr':
+                self.print_csr_details(sub_data, sub_path, sub_detail_indent)
+
+    def print_ca_sections(self, ca_data: Dict[str, Any], current_path: str, next_indent: str):
+        """Print sections for a CA (certificate, private key, CSR, child authorities, issued certificates)"""
+        own_cert = ca_data.get('own_certificate')
+        own_key = ca_data.get('own_private_key')
+        own_csr = ca_data.get('own_certificate_signing_request')
+        issued_certs = ca_data.get('issued_certificates', {})
+        child_authorities = ca_data.get('authorities', {})
+        
+        # Count and display sections - fix path names for consistency with original format
+        sections = []
+        if own_cert:
+            sections.append(('own_certificate', own_cert, 'Certificate'))
+        if own_csr:
+            sections.append(('own_certificate_signing_request', own_csr, 'Certificate Signing Request'))
+        if own_key:
+            sections.append(('own_private_key', own_key, 'Private Key'))
+        if child_authorities:
+            sections.append(('authorities', child_authorities, 'Certificate Authorities'))
+        if issued_certs:
+            sections.append(('issued_certificates', issued_certs, 'Issued Certificates'))
+        
+        for section_idx, (section_type, section_data, section_label) in enumerate(sections):
+            is_last_section = (section_idx == len(sections) - 1)
+            section_path = f"{current_path} -> {section_type}"
+            
+            if section_type == 'authorities':
+                section_indent = self.print_tree_section(next_indent, is_last_section, section_path, section_label, len(section_data))
+                self.print_ca_tree(section_data, section_indent, True, section_path)
+            elif section_type == 'issued_certificates':
+                section_indent = self.print_tree_section(next_indent, is_last_section, section_path, section_label, len(section_data))
+                self.print_issued_certificates(section_data, section_path, section_indent)
+            else:
+                # Individual items (certificate, key, csr) - use sub-header formatting
+                section_display = self.format_sub_header_node(section_path, section_label)
+                section_branch = next_indent + ("└──" if is_last_section else "├──")
+                print(f"{section_branch}{section_display}")
+                
+                section_detail_indent = next_indent + ("    " if is_last_section else "│   ")
+                if section_type == 'own_certificate':
+                    self.print_certificate_details(section_data, section_path, section_detail_indent)
+                elif section_type == 'own_private_key':
+                    self.print_private_key_details(section_data, section_path, section_detail_indent)
+                elif section_type == 'own_certificate_signing_request':
+                    self.print_csr_details(section_data, section_path, section_detail_indent)
+
+    def print_issued_certificates(self, issued_certs: Dict[str, Any], issued_path: str, cert_section_indent: str):
+        """Print issued certificates section"""
+        for j, (cert_name, cert_data) in enumerate(sorted(issued_certs.items())):
+            is_last_cert = (j == len(issued_certs) - 1)
+            cert_path = f"{issued_path} -> {cert_name}"
+            cert_type = cert_data.get('type', 'unknown')
+            
+            cert_display = self.format_tree_node(cert_path, f"{cert_name} [{cert_type}]", Colors.BLUE)
+            cert_branch = cert_section_indent + ("└──" if is_last_cert else "├──")
+            print(f"{cert_branch}{cert_display}")
+            
+            # Show certificate, private key, and CSR as sub-elements
+            cert_details_indent = cert_section_indent + ("    " if is_last_cert else "│   ")
+            self.process_sub_items(cert_data, cert_path, cert_details_indent)
+
+    def format_detailed_csr_info(self, csr_info: Dict[str, Any]) -> str:
+        """Format detailed CSR information for diff display"""
+        if 'error' in csr_info:
+            return f"[ERROR: {csr_info.get('error', 'Unknown error')}]"
+        
+        parts = []
+        
+        # Subject
+        subject = csr_info.get('subject', 'Unknown Subject')
+        parts.append(f"Subject: {subject}")
+        
+        # Key information
+        key_size = csr_info.get('public_key_size')
+        sig_alg = csr_info.get('signature_algorithm', '')
+        if key_size and sig_alg:
+            parts.append(f"Key: {key_size}-bit {sig_alg}")
+        
+        # File location
+        file_path = csr_info.get('file', '')
+        if file_path:
+            import os
+            parts.append(f"File: {os.path.basename(file_path)}")
+        
+        return "; ".join(parts)
+    
+    def print_certificate_details(self, cert_info: Dict[str, Any], base_path: str, indent: str) -> None:
+        """Print certificate details as tree sub-elements"""
+        if not cert_info or 'error' in cert_info:
+            error_msg = cert_info.get('error', 'Unknown error') if cert_info else 'No certificate data'
+            print(f"{indent}├── [!] ERROR: {error_msg}")
+            return
+        
+        details = []
+        
+        # Subject
+        subject = cert_info.get('subject', 'Unknown Subject')
+        if subject:
+            details.append(('Subject', subject))
+        
+        # Issuer (only if different from subject)
+        issuer = cert_info.get('issuer', 'Unknown Issuer')
+        is_self_signed = cert_info.get('is_self_signed', subject == issuer)
+        if not is_self_signed:
+            details.append(('Issuer', issuer))
+        else:
+            details.append(('Type', 'Self-signed'))
+        
+        # Certificate type
+        cert_type = cert_info.get('cert_type', '')
+        if cert_type:
+            details.append(('Cert Type', cert_type.upper().replace('_', ' ')))
+        
+        # Serial number (full)
+        serial = cert_info.get('serial_number', '')
+        if serial:
+            details.append(('Serial', serial))
+        
+        # Validity period - separate Valid from and Valid till
+        not_before = cert_info.get('not_valid_before', '')
+        not_after = cert_info.get('not_valid_after', '')
+        if not_before:
+            details.append(('Valid from', self.format_datetime(not_before)))
+        
+        if not_after:
+            details.append(('Valid till', self.format_datetime(not_after, with_days_remaining=True)))
+        
+        # Key information
+        key_size = cert_info.get('public_key_size')
+        sig_alg = cert_info.get('signature_algorithm', '')
+        if key_size or sig_alg:
+            key_str = f"{key_size}-bit" if key_size else ""
+            if sig_alg:
+                key_str += f" {sig_alg}" if key_str else sig_alg
+            details.append(('Key', key_str))
+        
+        # Fingerprint
+        fingerprint = cert_info.get('fingerprint_sha256', '')
+        if fingerprint:
+            fp_short = fingerprint[:16] + '...' if len(fingerprint) > 16 else fingerprint
+            details.append(('SHA256', fp_short))
+        
+        # Certificate modulus (for RSA certificates)
+        cert_modulus = cert_info.get('public_modulus', '')
+        if cert_modulus:
+            modulus_str = str(cert_modulus)
+            if len(modulus_str) > 32:
+                modulus_display = f"{modulus_str[:16]}...{modulus_str[-16:]}"
+            else:
+                modulus_display = modulus_str
+            details.append(('Modulus', modulus_display))
+        
+        # Subject Alternative Names
+        sans = cert_info.get('subject_alternative_names', [])
+        if sans:
+            if len(sans) <= 3:
+                details.append(('SANs', ', '.join(sans)))
+            else:
+                details.append(('SANs', f"{', '.join(sans[:3])} (+{len(sans)-3} more)"))
+        
+        # Certificate usage type (server, client, server_client) and key usage info
+        key_usage = cert_info.get('key_usage', [])
+        ext_key_usage = cert_info.get('extended_key_usage', [])
+        basic_constraints = cert_info.get('basic_constraints', {})
+        
+        # Determine certificate usage type
+        if basic_constraints.get('ca'):
+            cert_usage_type = "CA"
+            path_len = basic_constraints.get('path_length')
+            if path_len is not None:
+                cert_usage_type += f" (pathlen={path_len})"
+        else:
+            has_server = 'server_auth' in ext_key_usage
+            has_client = 'client_auth' in ext_key_usage
+            has_digital_sig = 'digital_signature' in key_usage
+            has_key_enc = 'key_encipherment' in key_usage
+            
+            if has_server and has_client:
+                cert_usage_type = "server_client"
+            elif has_server or has_key_enc:
+                cert_usage_type = "server"
+            elif has_client or has_digital_sig:
+                cert_usage_type = "client"
+            else:
+                cert_usage_type = "unknown"
+        
+        details.append(('Usage Type', cert_usage_type))
+        
+        # Key Usage
+        if key_usage:
+            details.append(('Key Usage', ', '.join(key_usage)))
+        
+        # Extended Key Usage
+        if ext_key_usage:
+            details.append(('Ext Key Usage', ', '.join(ext_key_usage)))
+        
+        # Basic Constraints (for CA certificates)
+        if basic_constraints.get('ca'):
+            bc_str = "CA=true"
+            path_len = basic_constraints.get('path_length')
+            if path_len is not None:
+                bc_str += f", pathlen={path_len}"
+            details.append(('Basic Constraints', bc_str))
+        
+        # Print all details with file information using correct tree structure
+        self.print_details_with_file_info(details, cert_info, base_path, indent)
+    
+    def print_private_key_details(self, key_info: Dict[str, Any], base_path: str, indent: str) -> None:
+        """Print private key details as tree sub-elements"""
+        if not key_info or 'error' in key_info:
+            error_msg = key_info.get('error', 'Unknown error') if key_info else 'No private key data'
+            print(f"{indent}├── [!] ERROR: {error_msg}")
+            return
+        
+        details = []
+        
+        # Key type and size
+        key_type = key_info.get('key_type', 'Unknown')
+        key_size = key_info.get('size') or key_info.get('key_strength')
+        if key_size:
+            details.append(('Type & Size', f"{key_size}-bit {key_type}"))
+        elif key_type != 'Unknown':
+            details.append(('Type', key_type))
+        
+        # Encryption status
+        encrypted = key_info.get('encrypted', False)
+        has_passphrase = key_info.get('has_passphrase_file', False)
+        if encrypted:
+            enc_str = "Encrypted"
+            if has_passphrase:
+                enc_str += " (passphrase file exists)"
+            details.append(('Encryption', enc_str))
+        else:
+            details.append(('Encryption', "Unencrypted"))
+        
+        # Public exponent (for RSA keys)
+        pub_exp = key_info.get('public_exponent')
+        if pub_exp and key_type == 'RSA':
+            details.append(('Public Exponent', str(pub_exp)))
+        
+        # Curve (for EC keys)
+        curve = key_info.get('curve')
+        if curve:
+            details.append(('Curve', curve))
+        
+        # Modulus (for RSA keys)
+        modulus = key_info.get('public_modulus', '')
+        if modulus:
+            modulus_str = str(modulus)
+            if len(modulus_str) > 32:
+                modulus_display = f"{modulus_str[:16]}...{modulus_str[-16:]}"
+            else:
+                modulus_display = modulus_str
+            details.append(('Modulus', modulus_display))
+        
+        # Print all details with file information using correct tree structure
+        self.print_details_with_file_info(details, key_info, base_path, indent)
+    
+    def print_csr_details(self, csr_info: Dict[str, Any], base_path: str, indent: str) -> None:
+        """Print CSR details as tree sub-elements"""
+        if not csr_info or 'error' in csr_info:
+            error_msg = csr_info.get('error', 'Unknown error') if csr_info else 'No CSR data'
+            print(f"{indent}├── [!] ERROR: {error_msg}")
+            return
+        
+        details = []
+        
+        # Subject
+        subject = csr_info.get('subject', 'Unknown Subject')
+        if subject:
+            details.append(('Subject', subject))
+        
+        # Public key information
+        key_size = csr_info.get('public_key_size')
+        sig_alg = csr_info.get('signature_algorithm', '')
+        pub_key_type = csr_info.get('public_key_type', '')
+        if key_size or sig_alg:
+            key_str = f"{key_size}-bit" if key_size else ""
+            if pub_key_type:
+                key_str += f" {pub_key_type}" if key_str else pub_key_type
+            if sig_alg:
+                key_str += f" {sig_alg}" if key_str else sig_alg
+            details.append(('Key', key_str))
+        
+        # Subject Alternative Names
+        sans = csr_info.get('subject_alternative_names', [])
+        if sans:
+            if len(sans) <= 3:
+                details.append(('SANs', ', '.join(sans)))
+            else:
+                details.append(('SANs', f"{', '.join(sans[:3])} (+{len(sans)-3} more)"))
+        
+        # Key Usage
+        key_usage = csr_info.get('key_usage', [])
+        if key_usage:
+            details.append(('Key Usage', ', '.join(key_usage)))
+        
+        # Extended Key Usage
+        ext_key_usage = csr_info.get('extended_key_usage', [])
+        if ext_key_usage:
+            details.append(('Ext Key Usage', ', '.join(ext_key_usage)))
+        
+        # Print all details with file information using correct tree structure
+        self.print_details_with_file_info(details, csr_info, base_path, indent)
     
     def print_ca_tree(self, authorities: Dict[str, Any], indent: str = "", is_last: bool = True, ca_path: str = "authorities") -> None:
         """Recursively print the CA tree structure with change highlighting and bracketed markers"""
         
         # At the root level, print the Certificate Authorities header
         if indent == "":
-            authorities_path = ca_path
-            authorities_marker = self.get_change_marker_for_path(authorities_path)
-            if authorities_marker in ['+', '-', '~']:
-                header_color = self.get_change_color_for_path(authorities_path)
-            else:
-                header_color = Colors.BOLD + Colors.WHITE
-            header_display = f"[:] Certificate Authorities ({len(authorities)})"
+            header_display = self.format_tree_item(":", "Certificate Authorities", len(authorities))
+            authorities_marker = self.get_change_marker_for_path(ca_path)
+            header_color = self.get_change_color_for_path(ca_path) if authorities_marker in ['+', '-', '~'] else Colors.BOLD + Colors.WHITE
             print(self.colorize(header_display, header_color))
         
         for i, (ca_name, ca_data) in enumerate(sorted(authorities.items())):
@@ -372,213 +1122,14 @@ class StateComparator:
             current_path = f"{ca_path} -> {ca_name}"
             
             # Determine the tree symbols
-            if indent == "":
-                # Root level - but now we have the header, so we're under it
-                branch = " ├──" if not is_last_ca else " └──"
-                next_indent = " │   " if not is_last_ca else "     "
-            else:
-                branch = indent + ("├──" if not is_last_ca else "└──")
-                next_indent = indent + ("│   " if not is_last_ca else "    ")
-            
-            # Get change marker and color for this CA
-            change_marker = self.get_change_marker_for_path(current_path)
-            change_color = self.get_change_color_for_path(current_path)
+            branch, next_indent = self.get_tree_branch(indent, is_last_ca)
             
             # Format CA name with bracketed marker
-            ca_display = f"[{change_marker}] {ca_name}"
-            if change_marker in ['+', '-', '~']:
-                ca_display = self.colorize(ca_display, change_color)
-            else:
-                ca_display = self.colorize(ca_display, Colors.BOLD + Colors.BLUE)
-            
+            ca_display = self.format_tree_node(current_path, ca_name, Colors.BOLD + Colors.BLUE)
             print(f"{branch}{ca_display}")
             
-            # Determine what sections exist
-            own_cert = ca_data.get('own_certificate')
-            issued_certs = ca_data.get('issued_certificates', {})
-            child_authorities = ca_data.get('authorities', {})
-            
-            # Count the sections that will be displayed
-            sections = []
-            if own_cert:
-                sections.append('certificate')
-            if child_authorities:
-                sections.append('authorities')
-            if issued_certs:
-                sections.append('issued_certificates')
-            
-            section_count = 0
-            
-            # Show CA's own certificate info
-            if own_cert:
-                section_count += 1
-                is_last_section = (section_count == len(sections))
-                
-                cert_path = f"{current_path} -> own_certificate"
-                cert_marker = self.get_change_marker_for_path(cert_path)
-                cert_color = self.get_change_color_for_path(cert_path)
-                cert_info = self.format_certificate_info(own_cert)
-                cert_display = f"[{cert_marker}] Certificate: {cert_info}"
-                if cert_marker in ['+', '-', '~']:
-                    cert_display = self.colorize(cert_display, cert_color)
-                
-                section_branch = next_indent + ("└──" if is_last_section else "├──")
-                print(f"{section_branch}{cert_display}")
-            
-            # Show child authorities section
-            if child_authorities:
-                section_count += 1
-                is_last_section = (section_count == len(sections))
-                
-                # Show Certificate Authorities header for child CAs
-                authorities_path = f"{current_path} -> authorities"
-                authorities_marker = self.get_change_marker_for_path(authorities_path)
-                if authorities_marker in ['+', '-', '~']:
-                    authorities_color = self.get_change_color_for_path(authorities_path)
-                else:
-                    authorities_color = Colors.BOLD + Colors.WHITE
-                authorities_display = f"[:] Certificate Authorities ({len(child_authorities)})"
-                
-                section_branch = next_indent + ("└──" if is_last_section else "├──")
-                print(f"{section_branch}{self.colorize(authorities_display, authorities_color)}")
-                
-                # Show each child CA
-                child_indent = next_indent + ("    " if is_last_section else "│   ")
-                for j, (child_name, child_data) in enumerate(sorted(child_authorities.items())):
-                    is_last_child = (j == len(child_authorities) - 1)
-                    child_path = f"{current_path} -> authorities -> {child_name}"
-                    child_marker = self.get_change_marker_for_path(child_path)
-                    child_color = self.get_change_color_for_path(child_path)
-                    
-                    child_branch = child_indent + ("└──" if is_last_child else "├──")
-                    child_display = f"[{child_marker}] {child_name}"
-                    if child_marker in ['+', '-', '~']:
-                        child_display = self.colorize(child_display, child_color)
-                    else:
-                        child_display = self.colorize(child_display, Colors.BOLD + Colors.BLUE)
-                    
-                    print(f"{child_branch}{child_display}")
-                    
-                    # Show child's sections
-                    child_next_indent = child_indent + ("    " if is_last_child else "│   ")
-                    child_own_cert = child_data.get('own_certificate')
-                    child_issued_certs = child_data.get('issued_certificates', {})
-                    child_child_authorities = child_data.get('authorities', {})
-                    
-                    child_sections = []
-                    if child_own_cert:
-                        child_sections.append('certificate')
-                    if child_child_authorities:
-                        child_sections.append('authorities')
-                    if child_issued_certs:
-                        child_sections.append('issued_certificates')
-                    
-                    child_section_count = 0
-                    
-                    # Child's certificate
-                    if child_own_cert:
-                        child_section_count += 1
-                        is_last_child_section = (child_section_count == len(child_sections))
-                        
-                        cert_path = f"{child_path} -> own_certificate"
-                        cert_marker = self.get_change_marker_for_path(cert_path)
-                        cert_color = self.get_change_color_for_path(cert_path)
-                        cert_info = self.format_certificate_info(child_own_cert)
-                        cert_display = f"[{cert_marker}] Certificate: {cert_info}"
-                        if cert_marker in ['+', '-', '~']:
-                            cert_display = self.colorize(cert_display, cert_color)
-                        
-                        child_cert_branch = child_next_indent + ("└──" if is_last_child_section else "├──")
-                        print(f"{child_cert_branch}{cert_display}")
-                    
-                    # Recursively handle nested authorities
-                    if child_child_authorities:
-                        child_section_count += 1
-                        is_last_child_section = (child_section_count == len(child_sections))
-                        nested_indent = child_next_indent + ("    " if is_last_child_section else "│   ")
-                        self.print_ca_tree(child_child_authorities, nested_indent, True, f"{child_path} -> authorities")
-                    
-                    # Child's issued certificates
-                    if child_issued_certs:
-                        child_section_count += 1
-                        is_last_child_section = (child_section_count == len(child_sections))
-                        
-                        issued_path = f"{child_path} -> issued_certificates"
-                        issued_marker = self.get_change_marker_for_path(issued_path)
-                        if issued_marker in ['+', '-', '~']:
-                            issued_color = self.get_change_color_for_path(issued_path)
-                        else:
-                            issued_color = Colors.BOLD + Colors.WHITE
-                        issued_display = f"[:] Issued Certificates ({len(child_issued_certs)})"
-                        
-                        child_issued_branch = child_next_indent + ("└──" if is_last_child_section else "├──")
-                        print(f"{child_issued_branch}{self.colorize(issued_display, issued_color)}")
-                        
-                        # Show each issued certificate
-                        cert_section_indent = child_next_indent + ("    " if is_last_child_section else "│   ")
-                        
-                        for k, (cert_name, cert_data) in enumerate(sorted(child_issued_certs.items())):
-                            is_last_cert = (k == len(child_issued_certs) - 1)
-                            cert_path = f"{issued_path} -> {cert_name}"
-                            cert_marker = self.get_change_marker_for_path(cert_path)
-                            cert_color = self.get_change_color_for_path(cert_path)
-                            
-                            cert_branch = cert_section_indent + ("└──" if is_last_cert else "├──")
-                            
-                            cert_info = cert_data.get('certificate')
-                            cert_type = cert_data.get('type', 'unknown')
-                            if cert_info:
-                                cert_details = self.format_certificate_info(cert_info)
-                                cert_display = f"[{cert_marker}] {cert_name} [{cert_type}]: {cert_details}"
-                            else:
-                                cert_display = f"[{cert_marker}] {cert_name} [{cert_type}]: [No certificate info]"
-                            
-                            if cert_marker in ['+', '-', '~']:
-                                cert_display = self.colorize(cert_display, cert_color)
-                            
-                            print(f"{cert_branch}{cert_display}")
-            
-            # Show issued certificates section
-            if issued_certs:
-                section_count += 1
-                is_last_section = (section_count == len(sections))
-                
-                issued_path = f"{current_path} -> issued_certificates"
-                issued_marker = self.get_change_marker_for_path(issued_path)
-                if issued_marker in ['+', '-', '~']:
-                    issued_color = self.get_change_color_for_path(issued_path)
-                else:
-                    issued_color = Colors.BOLD + Colors.WHITE
-                issued_display = f"[:] Issued Certificates ({len(issued_certs)})"
-                
-                section_branch = next_indent + ("└──" if is_last_section else "├──")
-                print(f"{section_branch}{self.colorize(issued_display, issued_color)}")
-                
-                # Determine the indent for certificates under this section
-                cert_section_indent = next_indent + ("    " if is_last_section else "│   ")
-                
-                # List each issued certificate
-                for j, (cert_name, cert_data) in enumerate(sorted(issued_certs.items())):
-                    is_last_cert = (j == len(issued_certs) - 1)
-                    cert_path = f"{issued_path} -> {cert_name}"
-                    cert_marker = self.get_change_marker_for_path(cert_path)
-                    cert_color = self.get_change_color_for_path(cert_path)
-                    
-                    cert_branch = cert_section_indent + ("└──" if is_last_cert else "├──")
-                    
-                    # Format certificate information
-                    cert_info = cert_data.get('certificate')
-                    cert_type = cert_data.get('type', 'unknown')
-                    if cert_info:
-                        cert_details = self.format_certificate_info(cert_info)
-                        cert_display = f"[{cert_marker}] {cert_name} [{cert_type}]: {cert_details}"
-                    else:
-                        cert_display = f"[{cert_marker}] {cert_name} [{cert_type}]: [No certificate info]"
-                    
-                    if cert_marker in ['+', '-', '~']:
-                        cert_display = self.colorize(cert_display, cert_color)
-                    
-                    print(f"{cert_branch}{cert_display}")
+            # Print all sections for this CA
+            self.print_ca_sections(ca_data, current_path, next_indent)
     
     def print_pki_tree(self, state: Dict[str, Any], title: str) -> None:
         """Print the full PKI tree structure"""

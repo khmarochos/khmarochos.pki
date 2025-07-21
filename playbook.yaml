@@ -31,7 +31,6 @@
         - always
         - pki
 
-
     - name: Issue or check all the certificates
       khmarochos.pki.issue_everything:
         pki_ca_cascade: "{{ pki_cascade_configuration }}"

@@ -34,6 +34,7 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -347,10 +348,10 @@ class PKIStateDumper:
             return "unknown"
     
     def serialize_certificate(self, cert: Certificate) -> Dict[str, Any]:
-        """Serialize a Certificate object to a dictionary"""
+        """Serialize a Certificate object to a dictionary with enhanced details"""
         try:
             cert_obj = cert.llo
-            return {
+            result = {
                 'nickname': cert.nickname,
                 'file': cert.file,
                 'subject': str(cert_obj.subject),
@@ -362,14 +363,168 @@ class PKIStateDumper:
                 'public_key_size': cert_obj.public_key().key_size,
                 'fingerprint_sha256': cert_obj.fingerprint(hashes.SHA256()).hex(),
             }
+            
+            # Add Subject Alternative Names
+            try:
+                san_extension = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME
+                ).value
+                sans = []
+                for name in san_extension:
+                    if isinstance(name, x509.DNSName):
+                        sans.append(f"DNS:{name.value}")
+                    elif isinstance(name, x509.IPAddress):
+                        sans.append(f"IP:{name.value}")
+                    elif isinstance(name, x509.RFC822Name):
+                        sans.append(f"email:{name.value}")
+                    elif isinstance(name, x509.UniformResourceIdentifier):
+                        sans.append(f"URI:{name.value}")
+                    else:
+                        sans.append(f"other:{str(name)}")
+                result['subject_alternative_names'] = sans
+            except x509.ExtensionNotFound:
+                result['subject_alternative_names'] = []
+            
+            # Add Key Usage
+            try:
+                key_usage = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.KEY_USAGE
+                ).value
+                usage_list = []
+                if key_usage.digital_signature:
+                    usage_list.append('digital_signature')
+                if key_usage.key_encipherment:
+                    usage_list.append('key_encipherment')
+                if key_usage.data_encipherment:
+                    usage_list.append('data_encipherment')
+                if key_usage.key_agreement:
+                    usage_list.append('key_agreement')
+                if key_usage.key_cert_sign:
+                    usage_list.append('key_cert_sign')
+                if key_usage.crl_sign:
+                    usage_list.append('crl_sign')
+                if hasattr(key_usage, 'content_commitment') and key_usage.content_commitment:
+                    usage_list.append('content_commitment')
+                result['key_usage'] = usage_list
+            except x509.ExtensionNotFound:
+                result['key_usage'] = []
+            
+            # Add Extended Key Usage
+            try:
+                ext_key_usage = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.EXTENDED_KEY_USAGE
+                ).value
+                ext_usage_list = []
+                for usage in ext_key_usage:
+                    if usage == x509.oid.ExtendedKeyUsageOID.SERVER_AUTH:
+                        ext_usage_list.append('server_auth')
+                    elif usage == x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH:
+                        ext_usage_list.append('client_auth')
+                    elif usage == x509.oid.ExtendedKeyUsageOID.CODE_SIGNING:
+                        ext_usage_list.append('code_signing')
+                    elif usage == x509.oid.ExtendedKeyUsageOID.EMAIL_PROTECTION:
+                        ext_usage_list.append('email_protection')
+                    elif usage == x509.oid.ExtendedKeyUsageOID.TIME_STAMPING:
+                        ext_usage_list.append('time_stamping')
+                    elif usage == x509.oid.ExtendedKeyUsageOID.OCSP_SIGNING:
+                        ext_usage_list.append('ocsp_signing')
+                    else:
+                        ext_usage_list.append(str(usage))
+                result['extended_key_usage'] = ext_usage_list
+            except x509.ExtensionNotFound:
+                result['extended_key_usage'] = []
+            
+            # Add Basic Constraints
+            try:
+                basic_constraints = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.BASIC_CONSTRAINTS
+                ).value
+                result['basic_constraints'] = {
+                    'ca': basic_constraints.ca,
+                    'path_length': basic_constraints.path_length
+                }
+            except x509.ExtensionNotFound:
+                result['basic_constraints'] = {'ca': False, 'path_length': None}
+            
+            # Add Authority Key Identifier
+            try:
+                auth_key_id = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.AUTHORITY_KEY_IDENTIFIER
+                ).value
+                result['authority_key_identifier'] = auth_key_id.key_identifier.hex() if auth_key_id.key_identifier else None
+            except x509.ExtensionNotFound:
+                result['authority_key_identifier'] = None
+            
+            # Add Subject Key Identifier
+            try:
+                subj_key_id = cert_obj.extensions.get_extension_for_oid(
+                    x509.oid.ExtensionOID.SUBJECT_KEY_IDENTIFIER
+                ).value
+                result['subject_key_identifier'] = subj_key_id.digest.hex()
+            except x509.ExtensionNotFound:
+                result['subject_key_identifier'] = None
+            
+            # Add certificate chain validation information
+            subject_str = str(cert_obj.subject)
+            issuer_str = str(cert_obj.issuer)
+            result['is_self_signed'] = subject_str == issuer_str
+            
+            # Check if this certificate is likely a root CA
+            if result['is_self_signed'] and result['basic_constraints']['ca']:
+                result['cert_type'] = 'root_ca'
+            elif result['basic_constraints']['ca']:
+                result['cert_type'] = 'intermediate_ca'
+            else:
+                result['cert_type'] = 'end_entity'
+            
+            # Add certificate validation status
+            try:
+                now = datetime.now().replace(tzinfo=cert_obj.not_valid_before.tzinfo)
+                if now < cert_obj.not_valid_before:
+                    result['validity_status'] = 'not_yet_valid'
+                elif now > cert_obj.not_valid_after:
+                    result['validity_status'] = 'expired'
+                else:
+                    result['validity_status'] = 'valid'
+                    
+                # Calculate days until expiry
+                days_until_expiry = (cert_obj.not_valid_after - now).days
+                result['days_until_expiry'] = days_until_expiry
+                
+            except Exception as validity_error:
+                self.logger.debug(f"Failed to check certificate validity: {validity_error}")
+                result['validity_status'] = 'unknown'
+                result['days_until_expiry'] = None
+            
+            # Add certificate modulus (for RSA certificates)
+            try:
+                public_key = cert_obj.public_key()
+                if hasattr(public_key, 'public_numbers'):
+                    # RSA public key
+                    result['public_modulus'] = str(public_key.public_numbers().n)
+            except Exception as modulus_error:
+                self.logger.debug(f"Failed to get certificate modulus: {modulus_error}")
+            
+            # Add file information
+            try:
+                file_path = Path(cert.file)
+                if file_path.exists():
+                    stat = file_path.stat()
+                    result['file_size'] = stat.st_size
+                    result['file_permissions'] = oct(stat.st_mode)[-3:]
+                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+            except Exception as file_error:
+                self.logger.debug(f"Failed to get certificate file information: {file_error}")
+            
+            return result
         except Exception as e:
             self.logger.warning(f"Failed to serialize certificate: {e}")
             return {'nickname': cert.nickname, 'file': cert.file, 'error': str(e)}
     
     def serialize_private_key(self, private_key: PrivateKey) -> Dict[str, Any]:
-        """Serialize a PrivateKey object to a dictionary"""
+        """Serialize a PrivateKey object to a dictionary with enhanced details"""
         try:
-            return {
+            result = {
                 'nickname': private_key.nickname,
                 'file': private_key.file,
                 'size': private_key.size,
@@ -377,21 +532,177 @@ class PKIStateDumper:
                 'encrypted': private_key.encrypted,
                 'public_modulus': str(private_key.public_modulus),
             }
+            
+            # Add key type information
+            try:
+                key_obj = private_key.llo
+                if hasattr(key_obj, 'key_size'):
+                    result['key_type'] = 'RSA'
+                    result['key_strength'] = key_obj.key_size
+                    
+                    # Add RSA-specific information
+                    public_key = key_obj.public_key()
+                    result['public_key_numbers'] = {
+                        'e': public_key.public_numbers().e,
+                        'n': str(public_key.public_numbers().n)
+                    }
+                    
+                elif hasattr(key_obj, 'curve'):
+                    result['key_type'] = 'EC'
+                    result['curve'] = key_obj.curve.name
+                    result['key_strength'] = key_obj.curve.key_size
+                else:
+                    result['key_type'] = 'Unknown'
+                    result['key_strength'] = getattr(key_obj, 'key_size', 0)
+            except Exception as key_error:
+                self.logger.debug(f"Failed to get detailed key information: {key_error}")
+                result['key_type'] = 'Unknown'
+                result['key_strength'] = private_key.size
+            
+            # Check for passphrase file existence
+            passphrase_file = private_key.file + '_passphrase'
+            result['has_passphrase_file'] = Path(passphrase_file).exists()
+            
+            # Add file permissions and timestamps
+            try:
+                file_path = Path(private_key.file)
+                if file_path.exists():
+                    stat = file_path.stat()
+                    result['file_permissions'] = oct(stat.st_mode)[-3:]
+                    result['file_size'] = stat.st_size
+                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+            except Exception as file_error:
+                self.logger.debug(f"Failed to get file information: {file_error}")
+            
+            return result
         except Exception as e:
             self.logger.warning(f"Failed to serialize private key: {e}")
             return {'nickname': private_key.nickname, 'file': private_key.file, 'error': str(e)}
     
     def serialize_csr(self, csr: CertificateSigningRequest) -> Dict[str, Any]:
-        """Serialize a CertificateSigningRequest object to a dictionary"""
+        """Serialize a CertificateSigningRequest object to a dictionary with enhanced details"""
         try:
             csr_obj = csr.llo
-            return {
+            result = {
                 'nickname': csr.nickname,
                 'file': csr.file,
                 'subject': str(csr_obj.subject),
                 'signature_algorithm': csr_obj.signature_algorithm_oid._name,
                 'public_key_size': csr_obj.public_key().key_size,
             }
+            
+            # Add Subject Alternative Names from CSR
+            try:
+                for extension in csr_obj.extensions:
+                    if extension.oid == x509.oid.ExtensionOID.SUBJECT_ALTERNATIVE_NAME:
+                        sans = []
+                        for name in extension.value:
+                            if isinstance(name, x509.DNSName):
+                                sans.append(f"DNS:{name.value}")
+                            elif isinstance(name, x509.IPAddress):
+                                sans.append(f"IP:{name.value}")
+                            elif isinstance(name, x509.RFC822Name):
+                                sans.append(f"email:{name.value}")
+                            elif isinstance(name, x509.UniformResourceIdentifier):
+                                sans.append(f"URI:{name.value}")
+                            else:
+                                sans.append(f"other:{str(name)}")
+                        result['subject_alternative_names'] = sans
+                        break
+                else:
+                    result['subject_alternative_names'] = []
+            except Exception as san_error:
+                self.logger.debug(f"Failed to parse SANs from CSR: {san_error}")
+                result['subject_alternative_names'] = []
+            
+            # Add key usage extensions from CSR
+            try:
+                for extension in csr_obj.extensions:
+                    if extension.oid == x509.oid.ExtensionOID.KEY_USAGE:
+                        key_usage = extension.value
+                        usage_list = []
+                        if key_usage.digital_signature:
+                            usage_list.append('digital_signature')
+                        if key_usage.key_encipherment:
+                            usage_list.append('key_encipherment')
+                        if key_usage.data_encipherment:
+                            usage_list.append('data_encipherment')
+                        if key_usage.key_agreement:
+                            usage_list.append('key_agreement')
+                        if key_usage.key_cert_sign:
+                            usage_list.append('key_cert_sign')
+                        if key_usage.crl_sign:
+                            usage_list.append('crl_sign')
+                        if hasattr(key_usage, 'content_commitment') and key_usage.content_commitment:
+                            usage_list.append('content_commitment')
+                        result['key_usage'] = usage_list
+                        break
+                else:
+                    result['key_usage'] = []
+            except Exception as ku_error:
+                self.logger.debug(f"Failed to parse key usage from CSR: {ku_error}")
+                result['key_usage'] = []
+            
+            # Add extended key usage from CSR
+            try:
+                for extension in csr_obj.extensions:
+                    if extension.oid == x509.oid.ExtensionOID.EXTENDED_KEY_USAGE:
+                        ext_key_usage = extension.value
+                        ext_usage_list = []
+                        for usage in ext_key_usage:
+                            if usage == x509.oid.ExtendedKeyUsageOID.SERVER_AUTH:
+                                ext_usage_list.append('server_auth')
+                            elif usage == x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH:
+                                ext_usage_list.append('client_auth')
+                            elif usage == x509.oid.ExtendedKeyUsageOID.CODE_SIGNING:
+                                ext_usage_list.append('code_signing')
+                            elif usage == x509.oid.ExtendedKeyUsageOID.EMAIL_PROTECTION:
+                                ext_usage_list.append('email_protection')
+                            elif usage == x509.oid.ExtendedKeyUsageOID.TIME_STAMPING:
+                                ext_usage_list.append('time_stamping')
+                            elif usage == x509.oid.ExtendedKeyUsageOID.OCSP_SIGNING:
+                                ext_usage_list.append('ocsp_signing')
+                            else:
+                                ext_usage_list.append(str(usage))
+                        result['extended_key_usage'] = ext_usage_list
+                        break
+                else:
+                    result['extended_key_usage'] = []
+            except Exception as eku_error:
+                self.logger.debug(f"Failed to parse extended key usage from CSR: {eku_error}")
+                result['extended_key_usage'] = []
+            
+            # Add public key details
+            try:
+                public_key = csr_obj.public_key()
+                result['public_key_type'] = type(public_key).__name__.replace('PublicKey', '')
+                
+                if hasattr(public_key, 'public_numbers'):
+                    # RSA key
+                    result['public_key_details'] = {
+                        'e': public_key.public_numbers().e,
+                        'n_bits': public_key.key_size
+                    }
+                elif hasattr(public_key, 'curve'):
+                    # EC key
+                    result['public_key_details'] = {
+                        'curve': public_key.curve.name,
+                        'key_size': public_key.curve.key_size
+                    }
+            except Exception as pk_error:
+                self.logger.debug(f"Failed to get public key details from CSR: {pk_error}")
+            
+            # Add file information
+            try:
+                file_path = Path(csr.file)
+                if file_path.exists():
+                    stat = file_path.stat()
+                    result['file_size'] = stat.st_size
+                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+            except Exception as file_error:
+                self.logger.debug(f"Failed to get CSR file information: {file_error}")
+            
+            return result
         except Exception as e:
             self.logger.warning(f"Failed to serialize CSR: {e}")
             return {'nickname': csr.nickname, 'file': csr.file, 'error': str(e)}
