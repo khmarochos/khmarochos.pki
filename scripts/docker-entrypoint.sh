@@ -149,9 +149,16 @@ dump_pki_state() {
 compare_pki_states() {
   local old_state="$1"
   local new_state="$2"
+  local force_color=""
+
+  if [[ "$(echo "${FORCE_COLOR}" | tr '[:upper:]' '[:lower:]')" == "true" ]]; then
+    force_color="--color"
+  else
+    force_color="--"
+  fi
 
   if [[ -f "${old_state}" && -f "${new_state}" ]]; then
-    if ! python3 "${STATE_COMPARE_SCRIPT}" "${old_state}" "${new_state}" 2>/dev/null; then
+    if ! python3 "${STATE_COMPARE_SCRIPT}" "${force_color}" "${old_state}" "${new_state}" 2>/dev/null; then
       warn "Failed to compare PKI states"
       warn "Old state: ${old_state}"
       warn "New state: ${new_state}"

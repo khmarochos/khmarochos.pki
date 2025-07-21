@@ -198,87 +198,157 @@ class StateComparator:
         print(self.colorize(f"After:  {after_file}", Colors.WHITE + Colors.BOLD))
         print()
     
-    def print_differences(self) -> None:
-        """Print all differences in unified diff style"""
-        if not self.differences:
-            print(self.colorize("No differences found", Colors.GREEN))
-            return
-        
-        print(self.colorize(f"Found {len(self.differences)} differences:", Colors.BOLD))
-        print()
-        
-        # Group differences by path for better organization
-        by_path = {}
-        for diff in self.differences:
-            path_parts = diff['path'].split(' -> ')
-            if len(path_parts) > 1:
-                base_path = ' -> '.join(path_parts[:-1])
-            else:
-                base_path = 'root'
-            
-            if base_path not in by_path:
-                by_path[base_path] = []
-            by_path[base_path].append(diff)
-        
-        # Print differences grouped by path
-        for base_path in sorted(by_path.keys()):
-            path_diffs = by_path[base_path]
-            
-            # Print path header
-            print(self.colorize(f"@@ {base_path} @@", Colors.MAGENTA))
-            
-            for diff in path_diffs:
-                self.print_single_difference(diff)
-            
-            print()  # Empty line between sections
     
-    def print_single_difference(self, diff: Dict[str, Any]) -> None:
-        """Print a single difference with detailed formatting for PKI objects"""
-        diff_type = diff['type']
-        path = diff['path']
-        
-        if diff_type == 'added':
-            formatted_value = self.format_pki_value_for_display(diff['value'], path)
-            print(self.colorize(f"+ {path}: {formatted_value}", Colors.GREEN))
-            
-        elif diff_type == 'removed':
-            formatted_value = self.format_pki_value_for_display(diff['value'], path)
-            print(self.colorize(f"- {path}: {formatted_value}", Colors.RED))
-            
-        elif diff_type == 'value_change':
-            old_formatted = self.format_pki_value_for_display(diff['old_value'], path)
-            new_formatted = self.format_pki_value_for_display(diff['new_value'], path)
-            print(self.colorize(f"- {path}: {old_formatted}", Colors.RED))
-            print(self.colorize(f"+ {path}: {new_formatted}", Colors.GREEN))
-            
-        elif diff_type == 'type_change':
-            old_type = diff['old_type']
-            new_type = diff['new_type']
-            print(self.colorize(f"~ {path}: type changed from {old_type} to {new_type}", Colors.YELLOW))
-            old_formatted = self.format_pki_value_for_display(diff['old_value'], path)
-            new_formatted = self.format_pki_value_for_display(diff['new_value'], path)
-            print(self.colorize(f"- {path}: {old_formatted}", Colors.RED))
-            print(self.colorize(f"+ {path}: {new_formatted}", Colors.GREEN))
     
-    def print_summary(self) -> None:
+    def count_recursive_cas(self, authorities: Dict[str, Any], change_type: str) -> tuple:
+        """Recursively count CAs and their components in a hierarchical structure"""
+        total_cas = 0
+        total_certs = 0
+        total_keys = 0
+        total_csrs = 0
+        
+        for ca_name, ca_data in authorities.items():
+            # Count this CA
+            total_cas += 1
+            
+            # Count CA's own certificate, private key, and CSR
+            if ca_data.get('own_certificate'):
+                total_certs += 1
+            if ca_data.get('own_private_key'):
+                total_keys += 1
+            if ca_data.get('own_certificate_signing_request'):
+                total_csrs += 1
+            
+            # Count issued certificates for this CA
+            issued_certs = ca_data.get('issued_certificates', {})
+            for cert_name, cert_data in issued_certs.items():
+                if cert_data.get('certificate'):
+                    total_certs += 1
+                if cert_data.get('private_key'):
+                    total_keys += 1
+                if cert_data.get('certificate_signing_request'):
+                    total_csrs += 1
+            
+            # Recursively count child CAs
+            child_authorities = ca_data.get('authorities', {})
+            if child_authorities:
+                child_cas, child_certs, child_keys, child_csrs = self.count_recursive_cas(child_authorities, change_type)
+                total_cas += child_cas
+                total_certs += child_certs
+                total_keys += child_keys
+                total_csrs += child_csrs
+        
+        return total_cas, total_certs, total_keys, total_csrs
+
+    def print_summary(self, after_state: Dict[str, Any] = None) -> None:
         """Print a summary of changes"""
         if not self.differences:
             return
             
-        # Count different types of changes
-        counts = {}
+        # Count different types of changes by PKI object type
+        pki_counts = {
+            'certificate_authorities': {'added': 0, 'removed': 0, 'changed': 0},
+            'certificates': {'added': 0, 'removed': 0, 'changed': 0},
+            'private_keys': {'added': 0, 'removed': 0, 'changed': 0},
+            'csrs': {'added': 0, 'removed': 0, 'changed': 0},
+            'other': {'added': 0, 'removed': 0, 'changed': 0}
+        }
+        
         for diff in self.differences:
             diff_type = diff['type']
-            counts[diff_type] = counts.get(diff_type, 0) + 1
+            path = diff['path']
+            
+            # Map change types
+            change_type = 'changed'  # default for value_change, type_change
+            if diff_type == 'added':
+                change_type = 'added'
+            elif diff_type == 'removed':
+                change_type = 'removed'
+            
+            # Determine PKI object type from path
+            if path.startswith('authorities ->') and path.count(' -> ') == 1:
+                # This is a CA-level change (e.g., "authorities -> root")
+                pki_counts['certificate_authorities'][change_type] += 1
+                
+                # When a CA is added/removed, also count its components
+                if change_type in ['added', 'removed'] and after_state:
+                    ca_name = path.split(' -> ')[1]
+                    
+                    # Look for this CA's data in the appropriate state
+                    try:
+                        ca_data = after_state.get('authorities', {}).get(ca_name, {})
+                        
+                        # Count CA's own certificate and private key
+                        if ca_data.get('own_certificate'):
+                            pki_counts['certificates'][change_type] += 1
+                        if ca_data.get('own_private_key'):
+                            pki_counts['private_keys'][change_type] += 1
+                        if ca_data.get('own_certificate_signing_request'):
+                            pki_counts['csrs'][change_type] += 1
+                        
+                        # Count all issued certificates, private keys, and CSRs
+                        issued_certs = ca_data.get('issued_certificates', {})
+                        for cert_name, cert_data in issued_certs.items():
+                            if cert_data.get('certificate'):
+                                pki_counts['certificates'][change_type] += 1
+                            if cert_data.get('private_key'):
+                                pki_counts['private_keys'][change_type] += 1
+                            if cert_data.get('certificate_signing_request'):
+                                pki_counts['csrs'][change_type] += 1
+                        
+                        # Recursively count child CAs and their components
+                        child_authorities = ca_data.get('authorities', {})
+                        if child_authorities:
+                            child_ca_count, child_cert_count, child_key_count, child_csr_count = self.count_recursive_cas(child_authorities, change_type)
+                            
+                            pki_counts['certificate_authorities'][change_type] += child_ca_count
+                            pki_counts['certificates'][change_type] += child_cert_count
+                            pki_counts['private_keys'][change_type] += child_key_count
+                            pki_counts['csrs'][change_type] += child_csr_count
+                        
+                    except Exception as e:
+                        # Fallback: assume CA has at least its own cert + private key
+                        pki_counts['certificates'][change_type] += 1
+                        pki_counts['private_keys'][change_type] += 1
+                    
+            elif 'own_certificate' in path or ('certificate' in path and 'certificate_signing_request' not in path):
+                pki_counts['certificates'][change_type] += 1
+            elif 'own_private_key' in path or 'private_key' in path:
+                pki_counts['private_keys'][change_type] += 1
+            elif 'own_certificate_signing_request' in path or 'certificate_signing_request' in path:
+                pki_counts['csrs'][change_type] += 1
+            else:
+                pki_counts['other'][change_type] += 1
         
         print(self.colorize("Summary:", Colors.BOLD + Colors.BLUE))
         
-        for diff_type, count in sorted(counts.items()):
-            type_name = diff_type.replace('_', ' ').title()
-            color = Colors.GREEN if diff_type == 'added' else Colors.RED if diff_type == 'removed' else Colors.YELLOW
-            print(self.colorize(f"  {type_name}: {count}", color))
+        # Print counts for each PKI object type
+        object_labels = {
+            'certificate_authorities': 'Certificate Authorities',
+            'certificates': 'Certificates',
+            'private_keys': 'Private Keys', 
+            'csrs': 'Certificate Signing Requests',
+            'other': 'Other Changes'
+        }
         
-        print(self.colorize(f"  Total changes: {len(self.differences)}", Colors.BOLD))
+        total_changes = 0
+        for obj_type, label in object_labels.items():
+            counts = pki_counts[obj_type]
+            obj_total = sum(counts.values())
+            if obj_total > 0:
+                parts = []
+                if counts['added'] > 0:
+                    parts.append(self.colorize(f"+{counts['added']}", Colors.GREEN))
+                if counts['removed'] > 0:
+                    parts.append(self.colorize(f"-{counts['removed']}", Colors.RED))
+                if counts['changed'] > 0:
+                    parts.append(self.colorize(f"~{counts['changed']}", Colors.YELLOW))
+                
+                change_summary = " ".join(parts)
+                print(f"  {label}: {obj_total} ({change_summary})")
+                total_changes += obj_total
+        
+        print(self.colorize(f"  Total changes: {total_changes}", Colors.BOLD))
     
     def get_change_marker_for_path(self, path: str) -> str:
         """Get the change marker symbol for a given path"""
@@ -413,122 +483,8 @@ class StateComparator:
         
         return f"{cn} (Serial: {serial[:8]}{'...' if len(serial) > 8 else ''}, Expires: {not_after}{validity_status}{cert_type_info}{key_info}{san_info}{usage_info})"
     
-    def format_pki_value_for_display(self, value: Any, path: str, max_length: int = 200) -> str:
-        """Format PKI-specific values with detailed information"""
-        # Check if this is a certificate, private key, or CSR based on the path and value
-        if isinstance(value, dict):
-            if 'subject' in value and 'issuer' in value and 'serial_number' in value:
-                # This is a certificate
-                return self.format_detailed_certificate_info(value)
-            elif 'size' in value and 'public_exponent' in value and 'encrypted' in value:
-                # This is a private key
-                return self.format_detailed_private_key_info(value)
-            elif 'subject' in value and 'signature_algorithm' in value and 'public_key_size' in value and 'issuer' not in value:
-                # This is a CSR
-                return self.format_detailed_csr_info(value)
-            else:
-                # Regular dictionary formatting
-                json_str = json.dumps(value, separators=(',', ':'))
-                if len(json_str) > max_length:
-                    return json_str[:max_length] + "..."
-                return json_str
-        else:
-            return self.format_value(value, max_length)
     
-    def format_detailed_certificate_info(self, cert_info: Dict[str, Any]) -> str:
-        """Format detailed certificate information for diff display"""
-        if 'error' in cert_info:
-            return f"[ERROR: {cert_info.get('error', 'Unknown error')}]"
-        
-        parts = []
-        
-        # Subject and issuer
-        subject = cert_info.get('subject', 'Unknown Subject')
-        issuer = cert_info.get('issuer', 'Unknown Issuer')
-        parts.append(f"Subject: {subject}")
-        if subject != issuer:
-            parts.append(f"Issuer: {issuer}")
-        else:
-            parts.append("[Self-signed]")
-        
-        # Serial and validity
-        serial = cert_info.get('serial_number', 'Unknown')
-        parts.append(f"Serial: {serial}")
-        
-        not_before = cert_info.get('not_valid_before', '')
-        not_after = cert_info.get('not_valid_after', '')
-        if not_before and not_after:
-            try:
-                from datetime import datetime, timezone
-                before_dt = datetime.fromisoformat(not_before.replace('Z', '+00:00'))
-                after_dt = datetime.fromisoformat(not_after.replace('Z', '+00:00'))
-                validity = f"{before_dt.strftime('%Y-%m-%d')} to {after_dt.strftime('%Y-%m-%d')}"
-                
-                # Check validity status
-                now = datetime.now(timezone.utc)
-                if now > after_dt:
-                    validity += " [EXPIRED]"
-                elif (after_dt - now).days <= 30:
-                    validity += f" [EXPIRES IN {(after_dt - now).days} DAYS]"
-                    
-                parts.append(f"Validity: {validity}")
-            except:
-                if not_after:
-                    parts.append(f"Expires: {not_after}")
-        
-        # Key information
-        key_size = cert_info.get('public_key_size')
-        sig_alg = cert_info.get('signature_algorithm', '')
-        if key_size and sig_alg:
-            parts.append(f"Key: {key_size}-bit {sig_alg}")
-        
-        # Fingerprint
-        fingerprint = cert_info.get('fingerprint_sha256', '')
-        if fingerprint:
-            parts.append(f"SHA256: {fingerprint[:16]}...")
-        
-        return "; ".join(parts)
     
-    def format_detailed_private_key_info(self, key_info: Dict[str, Any]) -> str:
-        """Format detailed private key information for diff display"""
-        if 'error' in key_info:
-            return f"[ERROR: {key_info.get('error', 'Unknown error')}]"
-        
-        parts = []
-        
-        # Key size and type
-        size = key_info.get('size')
-        if size:
-            parts.append(f"{size}-bit RSA")
-        
-        # Encryption status
-        encrypted = key_info.get('encrypted', False)
-        if encrypted:
-            parts.append("[ENCRYPTED]")
-        else:
-            parts.append("[UNENCRYPTED]")
-        
-        # Public exponent
-        pub_exp = key_info.get('public_exponent')
-        if pub_exp:
-            parts.append(f"PublicExp: {pub_exp}")
-        
-        # File location
-        file_path = key_info.get('file', '')
-        if file_path:
-            import os
-            parts.append(f"File: {os.path.basename(file_path)}")
-        
-        # Modulus (truncated)
-        modulus = key_info.get('public_modulus', '')
-        if modulus:
-            modulus_str = str(modulus)
-            if len(modulus_str) > 32:
-                parts.append(f"Modulus: {modulus_str[:16]}...{modulus_str[-16:]}")
-            else:
-                parts.append(f"Modulus: {modulus_str}")
-        
-        return "; ".join(parts)
     
     def format_file_size(self, file_size: int) -> str:
         """Format file size in a human-readable way"""
@@ -600,6 +556,67 @@ class StateComparator:
         
         return details
 
+    def print_x509_name_tree(self, name_data: Dict[str, str], header: str, base_path: str, indent: str) -> None:
+        """Print X.509 name (subject or issuer) in tree format"""
+        if not name_data:
+            return
+        
+        # Print name header
+        print(f"{indent}├── {self.colorize(f'[:] {header}', Colors.BOLD + Colors.WHITE)}")
+        name_indent = indent + "│   "
+        
+        # Standard order for displaying name components
+        component_order = ['C', 'ST', 'L', 'O', 'OU', 'CN', 'emailAddress']
+        displayed_components = []
+        
+        # First, display standard components in order
+        for component in component_order:
+            if component in name_data:
+                displayed_components.append(component)
+        
+        # Then add any additional components not in the standard order
+        for component in name_data:
+            if component not in displayed_components:
+                displayed_components.append(component)
+        
+        for i, component in enumerate(displayed_components):
+            is_last = (i == len(displayed_components) - 1)
+            branch = "└──" if is_last else "├──"
+            
+            value = name_data[component]
+            component_path = f"{base_path} -> {header.lower()} -> {component}"
+            detail_marker = self.get_change_marker_for_path(component_path)
+            detail_color = self.get_change_color_for_path(component_path)
+            
+            detail_display = f"[{detail_marker}] {component}: {value}"
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+            
+            print(f"{name_indent}{branch} {detail_display}")
+
+    def print_sans_tree(self, sans: List[str], base_path: str, indent: str) -> None:
+        """Print Subject Alternative Names in tree format"""
+        if not sans:
+            return
+        
+        # Print SANs header
+        print(f"{indent}├── {self.colorize('[:] SANs', Colors.BOLD + Colors.WHITE)}")
+        sans_indent = indent + "│   "
+        
+        for i, san in enumerate(sans):
+            is_last = (i == len(sans) - 1)
+            branch = "└──" if is_last else "├──"
+            
+            san_path = f"{base_path} -> sans -> {i}"
+            detail_marker = self.get_change_marker_for_path(san_path)
+            detail_color = self.get_change_color_for_path(san_path)
+            
+            detail_display = f"[{detail_marker}] {san}"
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+            
+            print(f"{sans_indent}{branch} {detail_display}")
+
     def print_file_info_tree(self, obj_info: Dict[str, Any], base_path: str, indent: str) -> None:
         """Print file information as tree branches at the end of entity details"""
         file_path = obj_info.get('file', '')
@@ -610,16 +627,9 @@ class StateComparator:
         filename = os.path.basename(file_path)
         
         # Print "File" as main branch with [:] marker (header style)
-        file_branch_path = f"{base_path} -> file"
-        file_marker = self.get_change_marker_for_path(file_branch_path)
-        
-        # Use [:] for unchanged files, otherwise use change marker
-        if file_marker in ['+', '-', '~']:
-            file_color = self.get_change_color_for_path(file_branch_path)
-            file_display = f"[{file_marker}] File"
-        else:
-            file_color = Colors.BOLD + Colors.WHITE
-            file_display = f"[:] File"
+        # Headers always use [:] marker and white-bold color regardless of change status
+        file_color = Colors.BOLD + Colors.WHITE
+        file_display = f"[:] File"
         
         file_display = self.colorize(file_display, file_color)
         print(f"{indent}└──{file_display}")
@@ -669,7 +679,7 @@ class StateComparator:
         sub_indent = indent + "    "
         for i, (detail_type, detail_value) in enumerate(file_details):
             is_last_detail = (i == len(file_details) - 1)
-            detail_path = f"{file_branch_path} -> {detail_type}"
+            detail_path = f"{base_path} -> file -> {detail_type}"
             detail_marker = self.get_change_marker_for_path(detail_path)
             detail_color = self.get_change_color_for_path(detail_path)
             
@@ -750,22 +760,18 @@ class StateComparator:
 
     def format_sub_header_node(self, path: str, label: str) -> str:
         """Format a sub-header node (Certificate, CSR, Private Key) with [:] marker and white-bold color"""
-        marker = self.get_change_marker_for_path(path)
-        # Use change color if there's a change, otherwise use white-bold
-        if marker in ['+', '-', '~']:
-            node_color = self.get_change_color_for_path(path)
-        else:
-            marker = ":"  # Use colon for unchanged sub-headers
-            node_color = Colors.BOLD + Colors.WHITE
+        # Headers always use [:] marker and white-bold color regardless of change status
+        marker = ":"
+        node_color = Colors.BOLD + Colors.WHITE
         
         display = f"[{marker}] {label}"
         return self.colorize(display, node_color)
 
     def print_tree_section(self, indent: str, is_last: bool, path: str, label: str, count: int = None, default_color: str = Colors.BOLD + Colors.WHITE):
         """Print a tree section header with formatting"""
-        section_marker = self.get_change_marker_for_path(path)
-        section_color = self.get_change_color_for_path(path) if section_marker in ['+', '-', '~'] else default_color
-        display = self.format_tree_item(section_marker if section_marker in ['+', '-', '~'] else ":", label, count)
+        # Headers always use [:] marker and white-bold color regardless of change status
+        section_color = Colors.BOLD + Colors.WHITE
+        display = self.format_tree_item(":", label, count)
         
         branch = indent + ("└──" if is_last else "├──")
         print(f"{branch}{self.colorize(display, section_color)}")
@@ -863,30 +869,6 @@ class StateComparator:
             cert_details_indent = cert_section_indent + ("    " if is_last_cert else "│   ")
             self.process_sub_items(cert_data, cert_path, cert_details_indent)
 
-    def format_detailed_csr_info(self, csr_info: Dict[str, Any]) -> str:
-        """Format detailed CSR information for diff display"""
-        if 'error' in csr_info:
-            return f"[ERROR: {csr_info.get('error', 'Unknown error')}]"
-        
-        parts = []
-        
-        # Subject
-        subject = csr_info.get('subject', 'Unknown Subject')
-        parts.append(f"Subject: {subject}")
-        
-        # Key information
-        key_size = csr_info.get('public_key_size')
-        sig_alg = csr_info.get('signature_algorithm', '')
-        if key_size and sig_alg:
-            parts.append(f"Key: {key_size}-bit {sig_alg}")
-        
-        # File location
-        file_path = csr_info.get('file', '')
-        if file_path:
-            import os
-            parts.append(f"File: {os.path.basename(file_path)}")
-        
-        return "; ".join(parts)
     
     def print_certificate_details(self, cert_info: Dict[str, Any], base_path: str, indent: str) -> None:
         """Print certificate details as tree sub-elements"""
@@ -897,17 +879,13 @@ class StateComparator:
         
         details = []
         
-        # Subject
-        subject = cert_info.get('subject', 'Unknown Subject')
-        if subject:
-            details.append(('Subject', subject))
+        # Handle Subject and Issuer separately - they will be shown as structured tree sections
+        # For self-signed certs, we'll show that as a regular detail
+        subject = cert_info.get('subject', {})
+        issuer = cert_info.get('issuer', {})
+        is_self_signed = cert_info.get('is_self_signed', False)
         
-        # Issuer (only if different from subject)
-        issuer = cert_info.get('issuer', 'Unknown Issuer')
-        is_self_signed = cert_info.get('is_self_signed', subject == issuer)
-        if not is_self_signed:
-            details.append(('Issuer', issuer))
-        else:
+        if is_self_signed:
             details.append(('Type', 'Self-signed'))
         
         # Certificate type
@@ -941,8 +919,11 @@ class StateComparator:
         # Fingerprint
         fingerprint = cert_info.get('fingerprint_sha256', '')
         if fingerprint:
-            fp_short = fingerprint[:16] + '...' if len(fingerprint) > 16 else fingerprint
-            details.append(('SHA256', fp_short))
+            if len(fingerprint) > 32:
+                fp_display = f"{fingerprint[:16]}...{fingerprint[-16:]}"
+            else:
+                fp_display = fingerprint
+            details.append(('SHA-256', fp_display))
         
         # Certificate modulus (for RSA certificates)
         cert_modulus = cert_info.get('public_modulus', '')
@@ -954,13 +935,7 @@ class StateComparator:
                 modulus_display = modulus_str
             details.append(('Modulus', modulus_display))
         
-        # Subject Alternative Names
-        sans = cert_info.get('subject_alternative_names', [])
-        if sans:
-            if len(sans) <= 3:
-                details.append(('SANs', ', '.join(sans)))
-            else:
-                details.append(('SANs', f"{', '.join(sans[:3])} (+{len(sans)-3} more)"))
+        # Subject Alternative Names will be handled separately as a tree section
         
         # Certificate usage type (server, client, server_client) and key usage info
         key_usage = cert_info.get('key_usage', [])
@@ -1006,8 +981,36 @@ class StateComparator:
                 bc_str += f", pathlen={path_len}"
             details.append(('Basic Constraints', bc_str))
         
-        # Print all details with file information using correct tree structure
-        self.print_details_with_file_info(details, cert_info, base_path, indent)
+        # Print regular details first (without subject, issuer, SANs)
+        for i, (label, value) in enumerate(details):
+            is_last_detail = (i == len(details) - 1)
+            detail_path = f"{base_path} -> {label.lower().replace(' ', '_').replace('&', 'and')}"
+            detail_marker = self.get_change_marker_for_path(detail_path)
+            detail_color = self.get_change_color_for_path(detail_path)
+            
+            # Always use junction (├) for regular details since we'll have subject/issuer/SANs after
+            branch = "├──"
+            
+            detail_display = f"[{detail_marker}] {label}: {value}"
+            
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+                
+            print(f"{indent}{branch} {detail_display}")
+        
+        # Print structured sections for Subject, Issuer, and SANs
+        if isinstance(subject, dict) and subject:
+            self.print_x509_name_tree(subject, 'Subject', base_path, indent)
+        
+        if isinstance(issuer, dict) and issuer and not is_self_signed:
+            self.print_x509_name_tree(issuer, 'Issuer', base_path, indent)
+        
+        sans = cert_info.get('subject_alternative_names', [])
+        if sans:
+            self.print_sans_tree(sans, base_path, indent)
+        
+        # Print file information last
+        self.print_file_info_tree(cert_info, base_path, indent)
     
     def print_private_key_details(self, key_info: Dict[str, Any], base_path: str, indent: str) -> None:
         """Print private key details as tree sub-elements"""
@@ -1069,10 +1072,8 @@ class StateComparator:
         
         details = []
         
-        # Subject
-        subject = csr_info.get('subject', 'Unknown Subject')
-        if subject:
-            details.append(('Subject', subject))
+        # Handle Subject separately - it will be shown as structured tree section
+        subject = csr_info.get('subject', {})
         
         # Public key information
         key_size = csr_info.get('public_key_size')
@@ -1086,13 +1087,7 @@ class StateComparator:
                 key_str += f" {sig_alg}" if key_str else sig_alg
             details.append(('Key', key_str))
         
-        # Subject Alternative Names
-        sans = csr_info.get('subject_alternative_names', [])
-        if sans:
-            if len(sans) <= 3:
-                details.append(('SANs', ', '.join(sans)))
-            else:
-                details.append(('SANs', f"{', '.join(sans[:3])} (+{len(sans)-3} more)"))
+        # Subject Alternative Names will be handled separately as a tree section
         
         # Key Usage
         key_usage = csr_info.get('key_usage', [])
@@ -1104,8 +1099,33 @@ class StateComparator:
         if ext_key_usage:
             details.append(('Ext Key Usage', ', '.join(ext_key_usage)))
         
-        # Print all details with file information using correct tree structure
-        self.print_details_with_file_info(details, csr_info, base_path, indent)
+        # Print regular details first (without subject and SANs)
+        for i, (label, value) in enumerate(details):
+            is_last_detail = (i == len(details) - 1)
+            detail_path = f"{base_path} -> {label.lower().replace(' ', '_').replace('&', 'and')}"
+            detail_marker = self.get_change_marker_for_path(detail_path)
+            detail_color = self.get_change_color_for_path(detail_path)
+            
+            # Always use junction (├) for regular details since we'll have subject/SANs after
+            branch = "├──"
+            
+            detail_display = f"[{detail_marker}] {label}: {value}"
+            
+            if detail_marker in ['+', '-', '~']:
+                detail_display = self.colorize(detail_display, detail_color)
+                
+            print(f"{indent}{branch} {detail_display}")
+        
+        # Print structured sections for Subject and SANs
+        if isinstance(subject, dict) and subject:
+            self.print_x509_name_tree(subject, 'Subject', base_path, indent)
+        
+        sans = csr_info.get('subject_alternative_names', [])
+        if sans:
+            self.print_sans_tree(sans, base_path, indent)
+        
+        # Print file information last
+        self.print_file_info_tree(csr_info, base_path, indent)
     
     def print_ca_tree(self, authorities: Dict[str, Any], indent: str = "", is_last: bool = True, ca_path: str = "authorities") -> None:
         """Recursively print the CA tree structure with change highlighting and bracketed markers"""
@@ -1113,8 +1133,8 @@ class StateComparator:
         # At the root level, print the Certificate Authorities header
         if indent == "":
             header_display = self.format_tree_item(":", "Certificate Authorities", len(authorities))
-            authorities_marker = self.get_change_marker_for_path(ca_path)
-            header_color = self.get_change_color_for_path(ca_path) if authorities_marker in ['+', '-', '~'] else Colors.BOLD + Colors.WHITE
+            # Headers always use white-bold color regardless of change status
+            header_color = Colors.BOLD + Colors.WHITE
             print(self.colorize(header_display, header_color))
         
         for i, (ca_name, ca_data) in enumerate(sorted(authorities.items())):
@@ -1159,11 +1179,8 @@ class StateComparator:
         # Print "After" tree with change markers
         self.print_pki_tree(after_state, "AFTER (with changes highlighted)")
         
-        # Print traditional diff output
-        if self.differences:
-            self.print_differences()
         
-        self.print_summary()
+        self.print_summary(after_state)
         
         # Return True if there are differences
         return len(self.differences) > 0
@@ -1178,6 +1195,7 @@ def main():
 Examples:
   python scripts/state_compare.py /tmp/pki_state/before.json /tmp/pki_state/after.json
   python scripts/state_compare.py --no-color state1.json state2.json > diff.txt
+  python scripts/state_compare.py --color state1.json state2.json  # Force colors even when not TTY
         """
     )
     
@@ -1185,8 +1203,11 @@ Examples:
                        help="Path to the 'before' state JSON file")
     parser.add_argument("after", 
                        help="Path to the 'after' state JSON file")
-    parser.add_argument("--no-color", action="store_true",
-                       help="Disable colored output")
+    color_group = parser.add_mutually_exclusive_group()
+    color_group.add_argument("--no-color", action="store_true",
+                            help="Disable colored output")
+    color_group.add_argument("--color", action="store_true",
+                            help="Force colored output even when output is not a TTY")
     
     args = parser.parse_args()
     
@@ -1200,7 +1221,7 @@ Examples:
         sys.exit(1)
     
     # Create comparator and run comparison
-    use_colors = not args.no_color and sys.stdout.isatty()
+    use_colors = args.color or (not args.no_color and sys.stdout.isatty())
     comparator = StateComparator(use_colors=use_colors)
     
     try:

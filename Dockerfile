@@ -13,7 +13,8 @@ ENV ANSIBLE_COLLECTIONS_PATH=/app/collections
 ENV PLAYBOOK_FILE=/app/playbook.yaml
 ENV CA_TREE_FILE=/app/vars/ca-tree.yaml
 ENV CERTIFICATES_FILE=/app/vars/certificates.yaml
-ENV PKI_STATE_DIR=
+ENV PKI_STATE_DIR=""
+ENV FORCE_COLOR=False
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

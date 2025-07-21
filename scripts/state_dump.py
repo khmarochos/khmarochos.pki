@@ -347,6 +347,42 @@ class PKIStateDumper:
             self.logger.warning(f"Failed to determine certificate type: {e}")
             return "unknown"
     
+    def add_file_information(self, result: Dict[str, Any], file_path_str: str, entity_type: str = "file") -> None:
+        """Add file information (size, permissions, modification time) to the result dictionary"""
+        try:
+            file_path = Path(file_path_str)
+            if file_path.exists():
+                stat = file_path.stat()
+                result['file_size'] = stat.st_size
+                result['file_permissions'] = oct(stat.st_mode)[-3:]
+                result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
+        except Exception as file_error:
+            self.logger.debug(f"Failed to get {entity_type} file information: {file_error}")
+    
+    def parse_x509_name(self, name_obj) -> Dict[str, str]:
+        """Parse an X.509 Name object into a structured dictionary"""
+        parsed = {}
+        for attribute in name_obj:
+            oid_name = attribute.oid._name
+            if oid_name == 'countryName':
+                parsed['C'] = attribute.value
+            elif oid_name == 'stateOrProvinceName':
+                parsed['ST'] = attribute.value
+            elif oid_name == 'localityName':
+                parsed['L'] = attribute.value
+            elif oid_name == 'organizationName':
+                parsed['O'] = attribute.value
+            elif oid_name == 'organizationalUnitName':
+                parsed['OU'] = attribute.value
+            elif oid_name == 'commonName':
+                parsed['CN'] = attribute.value
+            elif oid_name == 'emailAddress':
+                parsed['emailAddress'] = attribute.value
+            else:
+                # Handle other OIDs by their string representation
+                parsed[oid_name] = attribute.value
+        return parsed
+
     def serialize_certificate(self, cert: Certificate) -> Dict[str, Any]:
         """Serialize a Certificate object to a dictionary with enhanced details"""
         try:
@@ -354,8 +390,10 @@ class PKIStateDumper:
             result = {
                 'nickname': cert.nickname,
                 'file': cert.file,
-                'subject': str(cert_obj.subject),
-                'issuer': str(cert_obj.issuer),
+                'subject': self.parse_x509_name(cert_obj.subject),
+                'subject_string': str(cert_obj.subject),
+                'issuer': self.parse_x509_name(cert_obj.issuer),
+                'issuer_string': str(cert_obj.issuer),
                 'serial_number': str(cert_obj.serial_number),
                 'not_valid_before': cert_obj.not_valid_before.isoformat(),
                 'not_valid_after': cert_obj.not_valid_after.isoformat(),
@@ -506,15 +544,7 @@ class PKIStateDumper:
                 self.logger.debug(f"Failed to get certificate modulus: {modulus_error}")
             
             # Add file information
-            try:
-                file_path = Path(cert.file)
-                if file_path.exists():
-                    stat = file_path.stat()
-                    result['file_size'] = stat.st_size
-                    result['file_permissions'] = oct(stat.st_mode)[-3:]
-                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            except Exception as file_error:
-                self.logger.debug(f"Failed to get certificate file information: {file_error}")
+            self.add_file_information(result, cert.file, "certificate")
             
             return result
         except Exception as e:
@@ -563,16 +593,8 @@ class PKIStateDumper:
             passphrase_file = private_key.file + '_passphrase'
             result['has_passphrase_file'] = Path(passphrase_file).exists()
             
-            # Add file permissions and timestamps
-            try:
-                file_path = Path(private_key.file)
-                if file_path.exists():
-                    stat = file_path.stat()
-                    result['file_permissions'] = oct(stat.st_mode)[-3:]
-                    result['file_size'] = stat.st_size
-                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            except Exception as file_error:
-                self.logger.debug(f"Failed to get file information: {file_error}")
+            # Add file information
+            self.add_file_information(result, private_key.file, "private key")
             
             return result
         except Exception as e:
@@ -586,7 +608,8 @@ class PKIStateDumper:
             result = {
                 'nickname': csr.nickname,
                 'file': csr.file,
-                'subject': str(csr_obj.subject),
+                'subject': self.parse_x509_name(csr_obj.subject),
+                'subject_string': str(csr_obj.subject),
                 'signature_algorithm': csr_obj.signature_algorithm_oid._name,
                 'public_key_size': csr_obj.public_key().key_size,
             }
@@ -693,14 +716,7 @@ class PKIStateDumper:
                 self.logger.debug(f"Failed to get public key details from CSR: {pk_error}")
             
             # Add file information
-            try:
-                file_path = Path(csr.file)
-                if file_path.exists():
-                    stat = file_path.stat()
-                    result['file_size'] = stat.st_size
-                    result['last_modified'] = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            except Exception as file_error:
-                self.logger.debug(f"Failed to get CSR file information: {file_error}")
+            self.add_file_information(result, csr.file, "CSR")
             
             return result
         except Exception as e:
