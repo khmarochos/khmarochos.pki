@@ -141,31 +141,199 @@ ansible-playbook setup-pki.yaml
 
 ## Configuration
 
-### PKI Cascade Structure
+### PKI Cascade Configuration Structure
 
-The PKI configuration uses a hierarchical structure with special keys:
+The PKI configuration uses a sophisticated hierarchical structure that enables both parameter inheritance and CA-specific customization. Understanding this structure is crucial for effective PKI management.
 
-- `__propagated`: Parameters inherited by all child CAs
-- `__parameters`: CA-specific configuration
+#### Core Configuration Concepts
+
+**Hierarchical Inheritance**: Parameters defined at higher levels are automatically inherited by child CAs unless explicitly overridden.
+
+**Special Keys**: The configuration uses two special keys for advanced functionality:
+- `__propagated`: Global parameters that cascade down to all child CAs
+- `__parameters`: CA-specific configuration that applies only to that particular CA
+
+**Nickname-based Organization**: Each CA is identified by its position in the hierarchy, creating a natural nickname system (e.g., `root`, `root.intermediate`, `root.intermediate.server`).
+
+#### Configuration Anatomy
+
+```yaml
+pki_cascade_configuration:
+  __propagated:                    # Global settings for entire PKI
+    global_root_directory: "/opt/pki"
+    domain: "example.com"
+    # ... global parameters
+  
+  root:                           # Root CA (nickname: "root")  
+    __parameters:                 # Settings specific to root CA
+      name: "Root Certificate Authority"
+      certificate_term: 3650
+      # ... root-specific parameters
+    
+    intermediate:                 # Intermediate CA (nickname: "intermediate")
+      __parameters:               # Settings for intermediate CA
+        name: "Intermediate CA"
+        default: true            # This CA is default for certificate issuance
+        # ... intermediate-specific parameters
+      
+      server:                    # Server CA (nickname: "server")
+        __parameters:            # Settings for server certificate CA
+          name: "Server Certificate CA"
+          # ... server CA parameters
+      
+      client:                    # Client CA (nickname: "client") 
+        __parameters:            # Settings for client certificate CA
+          name: "Client Certificate CA"
+          # ... client CA parameters
+```
 
 #### Global Parameters (`__propagated`)
 
-| Parameter | Description | Default | Example |
-|-----------|-------------|---------|---------|
-| `global_root_directory` | Base directory for all PKI files | Required | `/opt/pki` |
-| `domain` | Primary domain for certificates | Required | `example.com` |
-| `certificate_subject_*` | Certificate subject fields | Required | See examples |
-| `private_key_passphrase_random` | Auto-generate passphrases | `true` | `true/false` |
+These parameters are inherited by all CAs in the hierarchy and define the foundational PKI settings:
 
-#### CA Parameters (`__parameters`)
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `global_root_directory` | str | ✓ | - | Base directory where all PKI files and subdirectories will be created |
+| `domain` | str | ✓ | - | Primary domain used in certificate subject names and as template variable |
+| `certificate_subject_country_name` | str | ✓ | - | Two-letter ISO country code (e.g., "US", "GB", "DE") |
+| `certificate_subject_state_or_province_name` | str | ✓ | - | Full state or province name |
+| `certificate_subject_locality_name` | str | ✓ | - | City or locality name |
+| `certificate_subject_organization_name` | str | ✓ | - | Organization or company name |
+| `certificate_subject_organizational_unit_name` | str | ✗ | - | Department or organizational unit |
+| `certificate_subject_email_address` | str | ✗ | - | Contact email address for the PKI |
+| `private_key_passphrase_random` | bool | ✗ | `true` | Auto-generate random passphrases for encrypted keys |
+| `private_key_passphrase_length` | int | ✗ | `32` | Length of generated passphrases |
+| `certificate_default_term` | int | ✗ | `90` | Default certificate validity period in days |
 
-| Parameter | Description | Default | Example |
-|-----------|-------------|---------|---------|
-| `name` | CA display name | `${nickname} Certificate Authority` | `Root CA` |
-| `private_key_encrypted` | Encrypt private key | `false` | `true/false` |
-| `private_key_size` | Key size in bits | `4096` | `2048/4096` |
-| `certificate_term` | Certificate validity in days | `90` | `365/3650` |
-| `default` | Default CA for operations | `false` | `true/false` |
+#### CA-Specific Parameters (`__parameters`)
+
+These parameters customize individual CAs and override inherited values:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `name` | str | ✗ | `"${nickname} Certificate Authority"` | Human-readable CA name (supports variable substitution) |
+| `private_key_encrypted` | bool | ✗ | `false` | Whether to encrypt the CA's private key with a passphrase |
+| `private_key_size` | int | ✗ | `4096` | RSA key size in bits (2048, 3072, 4096) |
+| `certificate_term` | int | ✗ | Inherited | Certificate validity period in days for this CA |
+| `certificate_type` | str | ✗ | `"ca"` | Certificate type (`"ca"` for intermediate CAs) |
+| `default` | bool | ✗ | `false` | Whether this CA is the default for certificate issuance operations |
+| `strict` | bool | ✗ | `false` | Enable strict validation and enhanced security checks |
+
+#### Variable Substitution
+
+The configuration supports dynamic variable substitution using `${variable_name}` syntax:
+
+**Available Variables:**
+- `${nickname}`: The CA's nickname in the hierarchy
+- `${domain}`: The domain from `__propagated` section
+- `${parent_nickname}`: Parent CA's nickname (for intermediate CAs)
+
+**Example:**
+```yaml
+root:
+  __parameters:
+    name: "Root CA for ${domain}"           # Becomes: "Root CA for example.com"
+  intermediate:
+    __parameters:
+      name: "${nickname} CA (${domain})"    # Becomes: "intermediate CA (example.com)"
+```
+
+#### Configuration Inheritance Rules
+
+1. **Global Propagation**: All `__propagated` parameters are available to every CA
+2. **Parameter Override**: `__parameters` values override inherited values
+3. **Hierarchical Cascade**: Child CAs inherit from parent CAs, not just global settings
+4. **Default Precedence**: Explicit values > Parent CA values > Global values > System defaults
+
+#### Advanced Configuration Examples
+
+**Multi-Environment Setup:**
+```yaml
+pki_cascade_configuration:
+  __propagated:
+    global_root_directory: "/opt/multi-env-pki"
+    domain: "corp.example.com"
+    certificate_subject_organization_name: "Example Corporation"
+    private_key_passphrase_random: true
+  
+  root:
+    __parameters:
+      name: "Corporate Root CA"
+      private_key_size: 4096
+      certificate_term: 7300  # 20 years
+      strict: true
+    
+    production:
+      __parameters:
+        name: "Production Environment CA"
+        certificate_term: 365
+        default: true
+      
+      web:
+        __parameters:
+          name: "Production Web Services CA"
+          certificate_term: 90
+      
+      api:
+        __parameters:
+          name: "Production API Services CA"
+          certificate_term: 30
+    
+    development:
+      __parameters:
+        name: "Development Environment CA"
+        certificate_term: 30
+        private_key_encrypted: false  # Less security for dev
+    
+    staging:
+      __parameters:
+        name: "Staging Environment CA"  
+        certificate_term: 90
+```
+
+**Geographic Distribution:**
+```yaml
+pki_cascade_configuration:
+  __propagated:
+    global_root_directory: "/opt/global-pki"
+    certificate_subject_organization_name: "Global Corp"
+    
+  global-root:
+    __parameters:
+      name: "Global Root Certificate Authority"
+      certificate_term: 10950  # 30 years
+      private_key_size: 4096
+    
+    us-region:
+      __propagated:
+        certificate_subject_country_name: "US"
+        certificate_subject_state_or_province_name: "California"
+      __parameters:
+        name: "US Regional CA"
+        certificate_term: 1825  # 5 years
+      
+      us-west:
+        __propagated:
+          certificate_subject_locality_name: "San Francisco"
+        __parameters:
+          name: "US West Coast CA"
+          default: true
+      
+      us-east:
+        __propagated:
+          certificate_subject_locality_name: "New York"
+        __parameters:
+          name: "US East Coast CA"
+    
+    eu-region:
+      __propagated:
+        certificate_subject_country_name: "DE"
+        certificate_subject_state_or_province_name: "Bavaria"
+        certificate_subject_locality_name: "Munich"
+      __parameters:
+        name: "EU Regional CA"
+        certificate_term: 1825  # 5 years
+```
 
 ### Certificate Types
 
@@ -182,29 +350,249 @@ The PKI configuration uses a hierarchical structure with special keys:
 
 ### khmarochos.pki.init_pki
 
-Initialize and setup PKI cascade structure.
+**Purpose:** Initialize and setup complete PKI infrastructure with hierarchical Certificate Authority cascades.
+
+**Description:**
+This module is the foundation of PKI infrastructure management. It creates directory structures, generates private keys, issues CA certificates, and establishes the complete certificate authority hierarchy according to your configuration. The module intelligently handles both fresh installations and updates to existing PKI structures.
 
 **Parameters:**
-- `pki_ca_cascade` (dict, required): PKI configuration structure
-- `load_if_exists` (bool): Load existing certificates (default: `true`)
-- `save_if_needed` (bool): Save new certificates (default: `true`)
-- `save_forced` (bool): Force save all certificates (default: `false`)
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `pki_ca_cascade` | dict | ✓ | - | Complete PKI configuration structure defining CA hierarchy, global parameters, and CA-specific settings |
+| `load_if_exists` | bool | ✗ | `true` | Load and integrate existing PKI certificates and keys if found in the file system |
+| `save_if_needed` | bool | ✗ | `true` | Save newly generated certificates and keys to disk when changes are detected |
+| `save_forced` | bool | ✗ | `false` | Force regeneration and saving of all PKI components, even if they already exist |
+
+**Return Values:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `result` | dict | Complete PKI cascade structure with all generated components |
+| `changed` | bool | Whether any changes were made to the PKI infrastructure |
+| `cascade_summary` | dict | Summary statistics of CAs created, certificates issued, and keys generated |
+
+**Use Cases:**
+- **Initial PKI Setup**: Create complete PKI infrastructure from scratch
+- **PKI Updates**: Add new CAs or modify existing CA configurations
+- **Infrastructure Recovery**: Restore PKI from configuration after disaster
+- **Development/Testing**: Quickly bootstrap PKI for development environments
+
+**Example - Basic Setup:**
+```yaml
+- name: Initialize basic PKI infrastructure
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/opt/pki"
+        domain: "example.com"
+        certificate_subject_country_name: "US"
+        certificate_subject_organization_name: "Example Corp"
+      root:
+        __parameters:
+          name: "Root Certificate Authority"
+          private_key_encrypted: true
+          certificate_term: 3650
+```
+
+**Example - Enterprise Hierarchy:**
+```yaml
+- name: Initialize enterprise PKI with intermediate CAs
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/etc/enterprise-pki"
+        domain: "corp.example.com"
+        private_key_passphrase_random: true
+      root:
+        __parameters:
+          name: "Enterprise Root CA"
+          private_key_size: 4096
+          certificate_term: 7300  # 20 years
+        intermediate:
+          __parameters:
+            name: "Intermediate CA for Services"
+            default: true
+            certificate_term: 1825  # 5 years
+          server:
+            __parameters:
+              name: "Server Certificate CA"
+              certificate_term: 365
+          client:
+            __parameters:
+              name: "Client Certificate CA"  
+              certificate_term: 180
+```
+
+---
 
 ### khmarochos.pki.init_dictionary
 
-Initialize PKI configuration dictionary for lookups.
+**Purpose:** Initialize PKI configuration dictionary for efficient CA and certificate lookups.
+
+**Description:**
+This utility module processes the PKI cascade configuration and creates optimized lookup dictionaries. It's primarily used internally by other modules but can be useful for custom automation scripts that need to query PKI configuration programmatically.
 
 **Parameters:**
-- `pki_ca_cascade` (dict, required): PKI configuration structure
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `pki_ca_cascade` | dict | ✓ | - | PKI configuration structure to process into lookup dictionaries |
+
+**Return Values:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `result` | dict | Dictionary mapping containing CA lookups, default CA identifications, and configuration inheritance chains |
+| `changed` | bool | Always `false` - this module only processes data, doesn't modify files |
+
+**Use Cases:**
+- **Configuration Validation**: Verify PKI configuration before applying changes
+- **Custom Automation**: Build custom scripts that need to query CA relationships
+- **Debugging**: Understand how configuration inheritance works in complex hierarchies
+
+**Example:**
+```yaml
+- name: Process PKI configuration for validation
+  khmarochos.pki.init_dictionary:
+    pki_ca_cascade: "{{ pki_cascade_configuration }}"
+  register: pki_dict
+
+- name: Show default CA
+  debug:
+    msg: "Default CA is: {{ pki_dict.result.default_ca_nickname }}"
+```
+
+---
 
 ### khmarochos.pki.issue_everything
 
-Issue certificates with private keys and CSRs.
+**Purpose:** Issue end-entity certificates with all required components (private keys, CSRs, passphrases).
+
+**Description:**
+This module handles the complete certificate issuance workflow for end-entity certificates (server, client, or combined certificates). It generates private keys, creates certificate signing requests, issues certificates from the specified CA, and manages passphrases - all in a single operation with full Ansible change tracking.
 
 **Parameters:**
-- `pki_ca_cascade` (dict, required): PKI configuration structure
-- `ca_nickname` (str, required): CA to use for signing
-- `certificate_parameters` (dict, required): Certificate configuration
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `pki_ca_cascade` | dict | ✓ | - | PKI configuration structure containing the target CA |
+| `ca_nickname` | str | ✓ | - | Nickname of the Certificate Authority to use for issuing the certificate |
+| `certificate_parameters` | dict | ✓ | - | Complete certificate specification including subject, extensions, key parameters, and validity |
+| `hide_passphrase_value` | bool | ✗ | `true` | Hide actual passphrase values in Ansible output for security |
+
+**Certificate Parameters Structure:**
+
+The `certificate_parameters` dictionary supports extensive configuration:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `nickname` | str | ✓ | Unique identifier for the certificate within the CA |
+| `certificate_type` | str | ✓ | Certificate usage: `"SERVER"`, `"CLIENT"`, `"SERVER_CLIENT"`, or `"NONE"` |
+| `certificate_term` | int | ✗ | Certificate validity period in days (inherits from CA if not specified) |
+| `certificate_subject_common_name` | str | ✓ | Common Name (CN) for the certificate subject |
+| `certificate_subject_alternative_names` | list | ✗ | List of Subject Alternative Names (DNS names, IP addresses, etc.) |
+| `private_key_encrypted` | bool | ✗ | Whether to encrypt the private key with a passphrase |
+| `private_key_size` | int | ✗ | RSA key size in bits (2048, 4096, etc.) |
+| `private_key_passphrase_random` | bool | ✗ | Generate random passphrase if encryption is enabled |
+
+**Subject Fields (optional):**
+- `certificate_subject_country_name` (str): Two-letter country code
+- `certificate_subject_state_or_province_name` (str): State or province name  
+- `certificate_subject_locality_name` (str): City or locality name
+- `certificate_subject_organization_name` (str): Organization name
+- `certificate_subject_organizational_unit_name` (str): Organizational unit
+- `certificate_subject_email_address` (str): Email address
+
+**Return Values:**
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `result.certificate` | dict | Certificate properties including file paths, subject details, validity dates, and extensions |
+| `result.private_key` | dict | Private key properties including encryption status, key size, and file location |
+| `result.certificate_signing_request` | dict | CSR properties and file information |
+| `result.passphrase` | dict | Passphrase information (value hidden by default) |
+| `changed` | bool | Whether any new certificates or keys were generated |
+
+**Use Cases:**
+- **Web Server Certificates**: Issue TLS certificates for HTTPS services
+- **Client Authentication**: Generate certificates for user/device authentication
+- **Service-to-Service**: Create certificates for microservice mutual TLS
+- **API Security**: Issue certificates for REST API authentication
+
+**Example - Web Server Certificate:**
+```yaml
+- name: Issue certificate for web server
+  khmarochos.pki.issue_everything:
+    pki_ca_cascade: "{{ pki_cascade_configuration }}"
+    ca_nickname: "intermediate"
+    certificate_parameters:
+      nickname: "web-server"
+      certificate_type: "SERVER"
+      certificate_term: 365
+      certificate_subject_common_name: "www.example.com"
+      certificate_subject_alternative_names:
+        - "DNS:www.example.com"
+        - "DNS:example.com"  
+        - "DNS:api.example.com"
+        - "IP:192.168.1.100"
+      private_key_encrypted: false
+      private_key_size: 2048
+  register: web_cert
+
+- name: Show certificate location
+  debug:
+    msg: "Certificate saved to: {{ web_cert.result.certificate.file }}"
+```
+
+**Example - Client Certificate with Encryption:**
+```yaml  
+- name: Issue encrypted client certificate
+  khmarochos.pki.issue_everything:
+    pki_ca_cascade: "{{ pki_cascade_configuration }}"
+    ca_nickname: "client-ca"
+    certificate_parameters:
+      nickname: "john-doe"
+      certificate_type: "CLIENT"
+      certificate_term: 90
+      certificate_subject_common_name: "john.doe@example.com"
+      certificate_subject_email_address: "john.doe@example.com"
+      private_key_encrypted: true
+      private_key_passphrase_random: true
+      private_key_size: 2048
+    hide_passphrase_value: true
+  register: client_cert
+
+- name: Show client certificate details  
+  debug:
+    msg: |
+      Client certificate issued:
+      - Certificate: {{ client_cert.result.certificate.file }}
+      - Private Key: {{ client_cert.result.private_key.file }}
+      - Encrypted: {{ client_cert.result.private_key.encrypted }}
+```
+
+**Example - Kubernetes Service Certificate:**
+```yaml
+- name: Issue certificate for Kubernetes API server
+  khmarochos.pki.issue_everything:
+    pki_ca_cascade: "{{ pki_cascade_configuration }}"
+    ca_nickname: "kubernetes"
+    certificate_parameters:
+      nickname: "kube-apiserver"
+      certificate_type: "SERVER"
+      certificate_term: 365
+      certificate_subject_common_name: "kube-apiserver"
+      certificate_subject_alternative_names:
+        - "DNS:kubernetes"
+        - "DNS:kubernetes.default"
+        - "DNS:kubernetes.default.svc"
+        - "DNS:kubernetes.default.svc.cluster.local"
+        - "IP:10.96.0.1"        # Cluster IP
+        - "IP:192.168.1.10"     # Master node IP
+      private_key_encrypted: false
+      private_key_size: 2048
+```
 
 ## Examples
 
