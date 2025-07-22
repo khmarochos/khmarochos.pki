@@ -98,6 +98,65 @@ EXAMPLES = r'''
           web:
             __parameters:
               name: "Web Services CA"
+  register: enterprise_pki
+
+# Extract specific CA information
+- name: Display all CA paths
+  debug:
+    msg: "CA {{ item.key }}: {{ item.value.paths.base }}"
+  loop: "{{ enterprise_pki.result.all_cas | dict2items }}"
+
+# Validate configuration before applying changes
+- name: Pre-flight check for PKI configuration
+  block:
+    - name: Validate PKI structure
+      khmarochos.pki.init_dictionary:
+        pki_ca_cascade: "{{ proposed_pki_config }}"
+      register: validation
+
+    - name: Ensure minimum requirements are met
+      assert:
+        that:
+          - validation.result.ca_count >= 2
+          - validation.result.default_ca_nickname is defined
+          - validation.result.global_root_directory | regex_search('^/')
+        fail_msg: "PKI configuration does not meet minimum requirements"
+
+    - name: Display validation results
+      debug:
+        msg: |
+          Validation passed! Configuration summary:
+          - CAs to create: {{ validation.result.ca_count }}
+          - Default issuing CA: {{ validation.result.default_ca_nickname }}
+          - Base directory: {{ validation.result.global_root_directory }}
+
+# Use dictionary for dynamic certificate issuance
+- name: Process PKI for multi-tenant environment
+  khmarochos.pki.init_dictionary:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/opt/pki/multi-tenant"
+        certificate_subject_organization_name: "Multi-Tenant Corp"
+      root:
+        __parameters:
+          name: "Multi-Tenant Root CA"
+        tenants:
+          __parameters:
+            name: "Tenant Management CA"
+          tenant-a:
+            __parameters:
+              name: "Tenant A CA"
+              default: true
+          tenant-b:
+            __parameters:
+              name: "Tenant B CA"
+  register: tenant_pki
+
+- name: Show tenant-specific CAs
+  debug:
+    msg: "Found tenant CA: {{ item }}"
+  when: "'tenant-' in item"
+  loop: "{{ tenant_pki.result.all_cas.keys() | list }}"
               certificate_term: 90
           api:
             __parameters:

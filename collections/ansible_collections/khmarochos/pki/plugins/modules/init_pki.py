@@ -98,6 +98,100 @@ EXAMPLES = r'''
             private_key_encrypted: true
             private_key_size: 2048
             certificate_term: 1825
+
+# Enterprise PKI with multiple intermediate CAs
+- name: Setup enterprise PKI hierarchy
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/etc/pki/enterprise"
+        domain: "corp.example.com"
+        certificate_subject_country_name: "US"
+        certificate_subject_state_or_province_name: "California"
+        certificate_subject_locality_name: "San Francisco"
+        certificate_subject_organization_name: "Example Corporation"
+        certificate_subject_organizational_unit_name: "IT Security"
+        private_key_algorithm: "RSA"
+        private_key_passphrase_random: true
+        certificate_digest_algorithm: "sha256"
+      root:
+        __parameters:
+          name: "Example Corp Root CA"
+          private_key_encrypted: true
+          private_key_size: 4096
+          certificate_term: 7300  # 20 years
+          certificate_digest_algorithm: "sha512"
+        intermediate:
+          __parameters:
+            name: "Example Corp Issuing CA"
+            private_key_encrypted: true
+            certificate_term: 3650  # 10 years
+          web:
+            __parameters:
+              name: "Web Services CA"
+              default: true
+              certificate_term: 1825  # 5 years
+          vpn:
+            __parameters:
+              name: "VPN Services CA"
+              certificate_term: 1825
+
+# Update existing PKI without overwriting
+- name: Add new intermediate CA to existing PKI
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/opt/pki"
+        certificate_subject_organization_name: "Example Corp"
+      root:
+        __parameters:
+          name: "Root CA"
+        code-signing:
+          __parameters:
+            name: "Code Signing CA"
+            certificate_term: 1825
+            certificate_key_usage:
+              - "keyCertSign"
+              - "digitalSignature"
+    load_if_exists: true
+    save_if_needed: true
+
+# Force regeneration of all PKI components
+- name: Regenerate PKI infrastructure
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/opt/pki"
+        certificate_subject_organization_name: "Example Corp"
+      root:
+        __parameters:
+          name: "Root CA"
+          private_key_encrypted: true
+        intermediate:
+          __parameters:
+            name: "Intermediate CA"
+            default: true
+    save_forced: true  # WARNING: This will overwrite existing certificates!
+
+# PKI with custom certificate extensions
+- name: Initialize PKI with custom extensions
+  khmarochos.pki.init_pki:
+    pki_ca_cascade:
+      __propagated:
+        global_root_directory: "/opt/pki"
+        certificate_subject_organization_name: "Example Corp"
+        # Custom variables accessible via ${variable_name}
+        crl_url: "http://crl.example.com"
+        ocsp_url: "http://ocsp.example.com"
+      root:
+        __parameters:
+          name: "Root CA"
+          private_key_encrypted: true
+          certificate_crl_distribution_points:
+            - "${crl_url}/root-ca.crl"
+          certificate_authority_information_access:
+            - "OCSP;URI:${ocsp_url}/root"
+            - "caIssuers;URI:http://ca.example.com/root-ca.crt"
     load_if_exists: true
     save_if_needed: true
   register: pki_result

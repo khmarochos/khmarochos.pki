@@ -203,7 +203,7 @@ EXAMPLES = r'''
     certificate_parameters:
       nickname: "john-doe"
       certificate_type: "CLIENT"
-      certificate_term: 90
+      certificate_term: 730  # 2 years for user certificates
       certificate_subject_common_name: "john.doe@example.com"
       certificate_subject_email_address: "john.doe@example.com"
       certificate_subject_organizational_unit_name: "Engineering Department"
@@ -297,17 +297,27 @@ EXAMPLES = r'''
     certificate_parameters:
       nickname: "{{ item.name }}"
       certificate_type: "SERVER"
-      certificate_term: 365
+      certificate_term: 90  # Short-lived for automated renewal
       certificate_subject_common_name: "{{ item.fqdn }}"
-      certificate_subject_alternative_names:
-        - "DNS:{{ item.fqdn }}"
-        - "DNS:{{ item.alt_name | default(item.fqdn) }}"
-      private_key_encrypted: false
-      private_key_size: 2048
+      certificate_subject_alternative_names: "{{ item.sans }}"
+      private_key_encrypted: "{{ item.encrypted | default(false) }}"
   loop:
-    - { name: "web01", fqdn: "web01.example.com", alt_name: "www.example.com" }
-    - { name: "web02", fqdn: "web02.example.com", alt_name: "app.example.com" }
-    - { name: "api-gateway", fqdn: "api.example.com" }
+    - name: "frontend"
+      fqdn: "www.example.com"
+      sans:
+        - "DNS:example.com"
+        - "DNS:www.example.com"
+    - name: "api"
+      fqdn: "api.example.com"
+      sans:
+        - "DNS:api.example.com"
+        - "DNS:api-v1.example.com"
+      encrypted: true
+    - name: "admin"
+      fqdn: "admin.example.com"
+      sans:
+        - "DNS:admin.example.com"
+        - "IP:10.0.0.50"
   register: bulk_certs
 
 - name: Display bulk certificate results
@@ -318,6 +328,58 @@ EXAMPLES = r'''
       - Valid until: {{ item.result.certificate.not_after }}
       - Changed: {{ item.changed }}
   loop: "{{ bulk_certs.results }}"
+
+# Integration with HashiCorp Vault
+- name: Issue certificate and store in Vault
+  block:
+    - name: Issue certificate
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: "vault-ca"
+        certificate_parameters:
+          nickname: "vault-integration"
+          certificate_type: "SERVER"
+          certificate_term: 90
+          certificate_subject_common_name: "vault.example.com"
+          certificate_subject_alternative_names:
+            - "DNS:vault.example.com"
+            - "DNS:vault.internal.com"
+      register: vault_cert
+
+    - name: Store certificate in Vault
+      hashivault_write:
+        secret: "pki/certs/{{ vault_cert.result.certificate.nickname }}"
+        data:
+          certificate: "{{ lookup('file', vault_cert.result.certificate.file) }}"
+          private_key: "{{ lookup('file', vault_cert.result.private_key.file) }}"
+          chain: "{{ lookup('file', vault_cert.result.certificate.chain_file) }}"
+
+# Certificate renewal workflow
+- name: Check and renew certificate if expiring soon
+  block:
+    - name: Check certificate expiration
+      openssl_certificate_info:
+        path: "/opt/pki/intermediate/certs/api-gateway.crt"
+      register: cert_info
+
+    - name: Calculate days until expiration
+      set_fact:
+        days_until_expiry: "{{ ((cert_info.not_after | to_datetime('%Y%m%d%H%M%SZ')) - (ansible_date_time.epoch | int | to_datetime('%s'))) / 86400 | int }}"
+
+    - name: Renew certificate if expiring within 30 days
+      khmarochos.pki.issue_everything:
+        pki_ca_cascade: "{{ pki_cascade_configuration }}"
+        ca_nickname: "intermediate"
+        certificate_parameters:
+          nickname: "api-gateway"
+          certificate_type: "SERVER"
+          certificate_term: 365
+          certificate_subject_common_name: "api.example.com"
+          certificate_subject_alternative_names:
+            - "DNS:api.example.com"
+            - "DNS:api-v2.example.com"
+        save_forced: true  # Force regeneration
+      when: days_until_expiry | int < 30
 
 # Error handling and conditional certificate issuance
 - name: Issue certificate with error handling
