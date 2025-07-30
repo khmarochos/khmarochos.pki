@@ -64,11 +64,11 @@ info() {
 # Display current configuration.
 show_configuration() {
   info "Configuration:"
-  info "  PLAYBOOK_FILE:     ${PLAYBOOK_FILE}"
-  info "  CA_TREE_FILE:      ${CA_TREE_FILE}"
-  info "  CERTIFICATES_FILE: ${CERTIFICATES_FILE}"
-  info "  ARTIFACTS_DIRECTORY: ${ARTIFACTS_DIRECTORY}"
-  info "  PKI_STATE_DIR:     ${PKI_STATE_DIR}"
+  info "  PLAYBOOK_FILE:        ${PLAYBOOK_FILE}"
+  info "  CA_TREE_FILE:         ${CA_TREE_FILE}"
+  info "  CERTIFICATES_FILE:    ${CERTIFICATES_FILE}"
+  info "  ARTIFACTS_DIRECTORY:  ${ARTIFACTS_DIRECTORY}"
+  info "  PKI_STATE_DIR:        ${PKI_STATE_DIR}"
 }
 
 # Check if required configuration files exist and set up defaults if needed.

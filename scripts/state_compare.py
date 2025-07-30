@@ -562,7 +562,7 @@ class StateComparator:
             return
         
         # Print name header
-        print(f"{indent}├── {self.colorize(f'[:] {header}', Colors.BOLD + Colors.WHITE)}")
+        print(f"{indent}├──{self.colorize(f'[:] {header}', Colors.BOLD + Colors.WHITE)}")
         name_indent = indent + "│   "
         
         # Standard order for displaying name components
@@ -600,7 +600,7 @@ class StateComparator:
             return
         
         # Print SANs header
-        print(f"{indent}├── {self.colorize('[:] SANs', Colors.BOLD + Colors.WHITE)}")
+        print(f"{indent}├──{self.colorize('[:] SANs', Colors.BOLD + Colors.WHITE)}")
         sans_indent = indent + "│   "
         
         for i, san in enumerate(sans):
@@ -874,7 +874,7 @@ class StateComparator:
         """Print certificate details as tree sub-elements"""
         if not cert_info or 'error' in cert_info:
             error_msg = cert_info.get('error', 'Unknown error') if cert_info else 'No certificate data'
-            print(f"{indent}├── [!] ERROR: {error_msg}")
+            print(f"{indent}├──[!] ERROR: {error_msg}")
             return
         
         details = []
@@ -1016,7 +1016,7 @@ class StateComparator:
         """Print private key details as tree sub-elements"""
         if not key_info or 'error' in key_info:
             error_msg = key_info.get('error', 'Unknown error') if key_info else 'No private key data'
-            print(f"{indent}├── [!] ERROR: {error_msg}")
+            print(f"{indent}├──[!] ERROR: {error_msg}")
             return
         
         details = []
@@ -1067,7 +1067,7 @@ class StateComparator:
         """Print CSR details as tree sub-elements"""
         if not csr_info or 'error' in csr_info:
             error_msg = csr_info.get('error', 'Unknown error') if csr_info else 'No CSR data'
-            print(f"{indent}├── [!] ERROR: {error_msg}")
+            print(f"{indent}├──[!] ERROR: {error_msg}")
             return
         
         details = []
