@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 LABEL maintainer="Volodymyr Melnyk <volodymyr@melnyk.host>"
 LABEL description="khmarochos.pki - PKI management tool with Ansible"
-LABEL version="0.0.1"
+LABEL version="0.0.4"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
