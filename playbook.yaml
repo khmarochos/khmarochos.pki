@@ -4,11 +4,32 @@
   connection: local
   gather_facts: false
 
+  vars:
+    # Default paths that can be overridden with environment variables
+    ca_tree_file: "{{ lookup('env', 'CA_TREE_FILE') | default('./vars/ca-tree.yaml', true) }}"
+    certificates_file: "{{ lookup('env', 'CERTIFICATES_FILE') | default('./vars/certificates.yaml', true) }}"
+    artifacts_directory: "{{ lookup('env', 'ARTIFACTS_DIRECTORY') | default('./pki', true) }}"
+
   vars_files:
-    - vars/ca-tree.yaml
-    - vars/certificates.yaml
+    - "{{ ca_tree_file }}"
+    - "{{ certificates_file }}"
 
   tasks:
+    - name: Display configuration paths
+      debug:
+        msg:
+          - "CA Tree File: {{ ca_tree_file }}"
+          - "Certificates File: {{ certificates_file }}"
+          - "Artifacts Directory: {{ artifacts_directory }}"
+      tags:
+        - always
+
+    - name: Ensure the cascade configuration includes the artifacts directory
+      set_fact:
+        pki_cascade_configuration: "{{ pki_cascade_configuration | combine({'__propagated': {'global_root_directory': artifacts_directory}}, recursive=True) }}"
+      tags:
+        - always
+
     - name: Initialize the PKI configuration dictionary
       khmarochos.pki.init_dictionary:
         pki_ca_cascade: "{{ pki_cascade_configuration }}"

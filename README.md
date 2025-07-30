@@ -750,6 +750,74 @@ The `certificate_parameters` dictionary supports extensive configuration:
       when: "'Certificate will expire' in cert_expiry.stdout"
 ```
 
+## Environment Variables
+
+The PKI collection supports environment variables for configuring file paths and directories, allowing flexible deployment across different environments.
+
+### Supported Environment Variables
+
+| Variable | Description | Default Value | Used In |
+|----------|-------------|---------------|---------|
+| `CA_TREE_FILE` | Path to the CA hierarchy configuration file | `./vars/ca-tree.yaml` | Ansible playbook, Docker |
+| `CERTIFICATES_FILE` | Path to the certificates configuration file | `./vars/certificates.yaml` | Ansible playbook, Docker |
+| `ARTIFACTS_DIRECTORY` | Path to the PKI artifacts directory where certificates, keys, and CRLs are stored | `./pki` | Ansible playbook, Docker |
+| `PLAYBOOK_FILE` | Path to the Ansible playbook file | `./playbook.yaml` | Docker only |
+| `PKI_STATE_DIR` | Path to the state snapshots directory | Temporary directory | Docker only |
+
+### Usage Examples
+
+#### With Ansible Playbook
+
+```bash
+# Override configuration file paths
+CA_TREE_FILE=/custom/path/ca-hierarchy.yaml \
+CERTIFICATES_FILE=/custom/path/certs.yaml \
+ARTIFACTS_DIRECTORY=/custom/pki/storage \
+ansible-playbook playbook.yaml
+
+# Using export for multiple runs
+export CA_TREE_FILE=/etc/pki/config/ca-tree.yaml
+export CERTIFICATES_FILE=/etc/pki/config/certificates.yaml
+export ARTIFACTS_DIRECTORY=/var/lib/pki
+ansible-playbook playbook.yaml
+```
+
+#### With Docker
+
+```bash
+# Override all paths
+docker run --rm \
+  -e CA_TREE_FILE=/app/custom/ca-tree.yaml \
+  -e CERTIFICATES_FILE=/app/custom/certificates.yaml \
+  -e ARTIFACTS_DIRECTORY=/app/custom-pki \
+  -v $(pwd)/custom:/app/custom \
+  khmarochos/pki
+
+# Using environment file
+cat > .env <<EOF
+CA_TREE_FILE=/app/config/ca-tree.yaml
+CERTIFICATES_FILE=/app/config/certificates.yaml
+ARTIFACTS_DIRECTORY=/app/pki-storage
+EOF
+
+docker run --rm --env-file .env \
+  -v $(pwd)/config:/app/config:ro \
+  -v $(pwd)/pki-storage:/app/pki-storage \
+  khmarochos/pki
+```
+
+### Configuration Precedence
+
+1. Environment variables (highest priority)
+2. Default values in playbook/scripts
+3. System defaults (lowest priority)
+
+The environment variables are particularly useful for:
+- CI/CD pipelines with different configurations per environment
+- Containerized deployments with mounted volumes
+- Multi-tenant PKI setups with separate configuration files
+- Development vs. production environment separation
+
 ## Docker Usage
 
 ### Quick Start with Docker
@@ -823,8 +891,9 @@ For easier management, use docker-compose with environment variables:
 
 ```bash
 # Set environment variables
-export PKI_DIR=/path/to/your/pki
-export CA_TREE_CONFIG=/path/to/your/vars/ca-tree.yaml
+export ARTIFACTS_DIRECTORY=/path/to/your/pki
+export CA_TREE_FILE=/path/to/your/vars/ca-tree.yaml
+export CERTIFICATES_FILE=/path/to/your/vars/certificates.yaml
 export PLAYBOOK_FILE=/path/to/your/playbook.yaml
 
 # Run the container
@@ -835,8 +904,9 @@ docker-compose up --rm
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PKI_DIR` | Path to your PKI directory | `./pki` |
-| `CA_TREE_CONFIG` | Path to CA hierarchy config | `./vars/ca-tree.yaml` |
+| `ARTIFACTS_DIRECTORY` | Path to your PKI artifacts directory | `./pki` |
+| `CA_TREE_FILE` | Path to CA hierarchy config | `./vars/ca-tree.yaml` |
+| `CERTIFICATES_FILE` | Path to certificates config | `./vars/certificates.yaml` |
 | `PLAYBOOK_FILE` | Path to your playbook | `./playbook.yaml` |
 
 ### Example .env file
@@ -844,8 +914,9 @@ docker-compose up --rm
 Create a `.env` file in your project directory:
 
 ```env
-PKI_DIR=./pki
-CA_TREE_CONFIG=./vars/ca-tree.yaml
+ARTIFACTS_DIRECTORY=./pki
+CA_TREE_FILE=./vars/ca-tree.yaml
+CERTIFICATES_FILE=./vars/certificates.yaml
 PLAYBOOK_FILE=./setup-pki.yaml
 ```
 

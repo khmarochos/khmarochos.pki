@@ -22,6 +22,7 @@
 #   PLAYBOOK_FILE     - Path to the Ansible playbook (default: ./playbook.yaml)
 #   CA_TREE_FILE      - Path to the CA hierarchy configuration (default: ./vars/ca-tree.yaml)
 #   CERTIFICATES_FILE - Path to the certificates configuration (default: ./vars/certificates.yaml)
+#   ARTIFACTS_DIRECTORY - Path to the PKI artifacts directory (default: ./pki)
 #   PKI_STATE_DIR     - Path to the state snapshots' directory (create a new temporary one by default)
 
 set -euo pipefail
@@ -36,6 +37,7 @@ readonly STATE_COMPARE_SCRIPT="/app/scripts/state_compare.py"
 PLAYBOOK_FILE="${PLAYBOOK_FILE:-./playbook.yaml}"
 CA_TREE_FILE="${CA_TREE_FILE:-./vars/ca-tree.yaml}"
 CERTIFICATES_FILE="${CERTIFICATES_FILE:-./vars/certificates.yaml}"
+ARTIFACTS_DIRECTORY="${ARTIFACTS_DIRECTORY:-./pki}"
 PKI_STATE_DIR="${PKI_STATE_DIR:-"$(mktemp -d)"}"
 
 # Print error message and exit.
@@ -65,6 +67,7 @@ show_configuration() {
   info "  PLAYBOOK_FILE:     ${PLAYBOOK_FILE}"
   info "  CA_TREE_FILE:      ${CA_TREE_FILE}"
   info "  CERTIFICATES_FILE: ${CERTIFICATES_FILE}"
+  info "  ARTIFACTS_DIRECTORY: ${ARTIFACTS_DIRECTORY}"
   info "  PKI_STATE_DIR:     ${PKI_STATE_DIR}"
 }
 
@@ -112,13 +115,9 @@ dump_pki_state() {
 
   info "Dumping PKI state: ${description}"
 
-  # Determine PKI root directory (look for common locations)
-  if [[ -d "./pki" ]]; then
-    pki_root_dir="./pki"
-  elif [[ -d "/tmp/pki" ]]; then
-    pki_root_dir="/tmp/pki"
-  elif [[ -d "/app/pki" ]]; then
-    pki_root_dir="/app/pki"
+  # Determine PKI root directory (use ARTIFACTS_DIRECTORY first, then look for common locations)
+  if [[ -d "${ARTIFACTS_DIRECTORY}" ]]; then
+    pki_root_dir="${ARTIFACTS_DIRECTORY}"
   else
     # Try to find any directory containing CA structure
     while IFS= read -r -d '' dir; do
