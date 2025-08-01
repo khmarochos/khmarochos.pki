@@ -61,38 +61,49 @@ checkout scm: [
 
 This project includes a Makefile that automates the build process:
 
-### Quick Build
+### Complete Release Workflow
 
-To create a full release (git tag, Docker image, and Ansible Galaxy archive):
+To do a complete release (build, push, and publish everything):
 
 ```bash
-make build
+make release
 ```
 
 This will:
 1. Create a git tag `release-X.Y.Z` (based on VERSION file)
 2. Build Docker images tagged as `khmarochos/pki:X.Y.Z` and `khmarochos/pki:latest`
 3. Build the Ansible Galaxy collection archive `khmarochos-pki-X.Y.Z.tar.gz`
+4. Push the git tag to remote repository
+5. Push Docker images to registry
+6. Publish the Galaxy collection to Ansible Galaxy
 
-### Individual Build Steps
+### Build Only
 
-You can also run individual build steps:
+To just build without pushing:
 
 ```bash
-# Check current version
-make check-version
+make build
+```
 
-# Create git tag only
-make tag-release
+### Individual Steps
 
-# Build Docker image only
-make build-docker
+You can also run individual steps:
 
-# Build Ansible Galaxy archive only
-make build-galaxy
+```bash
+# Build steps
+make build-docker        # Build Docker images only
+make build-galaxy        # Build Galaxy archive only
+make tag-release         # Create git tag only
 
-# Clean generated files
-make clean
+# Push steps  
+make push-git           # Push git tag only
+make push-docker        # Push Docker images only
+make push               # Push both git tag and Docker images
+make publish-galaxy     # Publish Galaxy collection only
+
+# Utility
+make check-version      # Show current version
+make clean             # Clean generated files
 ```
 
 ### Version Management

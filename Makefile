@@ -121,9 +121,66 @@ build: check-prerequisites check-version tag-release build-docker build-galaxy #
 	@echo "  - Galaxy archive: $(GALAXY_ARCHIVE)"
 	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Push git tag:     git push origin $(GIT_TAG)"
-	@echo "  2. Push Docker:      docker push $(DOCKER_TAG) && docker push $(DOCKER_TAG_LATEST)"
-	@echo "  3. Publish Galaxy:   ansible-galaxy collection publish $(GALAXY_ARCHIVE)"
+	@echo "  1. Push everything:  make push"
+	@echo "  2. Publish Galaxy:   make publish-galaxy"
+
+.PHONY: push-git
+push-git: ## Push git tag to remote
+	@echo "Pushing git tag $(GIT_TAG) to remote..."
+	@if ! git rev-parse $(GIT_TAG) >/dev/null 2>&1; then \
+		echo "Error: Git tag $(GIT_TAG) does not exist locally"; \
+		echo "Run 'make tag-release' or 'make build' first"; \
+		exit 1; \
+	fi
+	@git push origin $(GIT_TAG)
+	@echo "Git tag $(GIT_TAG) pushed successfully"
+
+.PHONY: push-docker
+push-docker: ## Push Docker images to registry
+	@echo "Pushing Docker images to registry..."
+	@if ! docker image inspect $(DOCKER_TAG) >/dev/null 2>&1; then \
+		echo "Error: Docker image $(DOCKER_TAG) does not exist locally"; \
+		echo "Run 'make build-docker' or 'make build' first"; \
+		exit 1; \
+	fi
+	@echo "Pushing $(DOCKER_TAG)..."
+	@docker push $(DOCKER_TAG)
+	@echo "Pushing $(DOCKER_TAG_LATEST)..."
+	@docker push $(DOCKER_TAG_LATEST)
+	@echo "Docker images pushed successfully"
+
+.PHONY: push
+push: push-git push-docker ## Push git tag and Docker images
+	@echo ""
+	@echo "Push completed successfully!"
+	@echo ""
+	@echo "Pushed:"
+	@echo "  - Git tag:        $(GIT_TAG)"
+	@echo "  - Docker images:  $(DOCKER_TAG), $(DOCKER_TAG_LATEST)"
+	@echo ""
+	@echo "Next step:"
+	@echo "  - Publish Galaxy:   make publish-galaxy"
+
+.PHONY: publish-galaxy
+publish-galaxy: ## Publish Ansible Galaxy collection
+	@echo "Publishing Ansible Galaxy collection..."
+	@if [ ! -f "$(GALAXY_ARCHIVE)" ]; then \
+		echo "Error: Galaxy archive $(GALAXY_ARCHIVE) not found"; \
+		echo "Run 'make build-galaxy' or 'make build' first"; \
+		exit 1; \
+	fi
+	@ansible-galaxy collection publish $(GALAXY_ARCHIVE)
+	@echo "Galaxy collection $(GALAXY_ARCHIVE) published successfully"
+
+.PHONY: release
+release: build push publish-galaxy ## Complete release workflow (build, push, publish)
+	@echo ""
+	@echo "Release $(VERSION) completed successfully!"
+	@echo ""
+	@echo "Summary:"
+	@echo "  - Git tag $(GIT_TAG) created and pushed"
+	@echo "  - Docker images $(DOCKER_TAG) and $(DOCKER_TAG_LATEST) built and pushed"
+	@echo "  - Galaxy collection $(GALAXY_ARCHIVE) built and published"
 
 .PHONY: clean
 clean: ## Clean generated files
