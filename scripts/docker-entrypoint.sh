@@ -27,6 +27,11 @@
 
 set -euo pipefail
 
+# Source bash-helpers modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/bash-helpers/lib/log.sh"
+source "${SCRIPT_DIR}/lib/bash-helpers/lib/lifecycle.sh"
+
 # Constants
 readonly SCRIPT_NAME="$(basename "${0}")"
 readonly DEFAULT_PLAYBOOK="/app/playbook-default.yaml"
@@ -38,37 +43,31 @@ PLAYBOOK_FILE="${PLAYBOOK_FILE:-./playbook.yaml}"
 CA_TREE_FILE="${CA_TREE_FILE:-./vars/ca-tree.yaml}"
 CERTIFICATES_FILE="${CERTIFICATES_FILE:-./vars/certificates.yaml}"
 ARTIFACTS_DIRECTORY="${ARTIFACTS_DIRECTORY:-./pki}"
-PKI_STATE_DIR="${PKI_STATE_DIR:-"$(mktemp -d)"}"
 
-# Print error message and exit.
-# Arguments:
-#   $1: Error message
-err() {
-  echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')] ${SCRIPT_NAME}: ERROR: $*" >&2
-}
+# Initialize PKI_STATE_DIR and track for cleanup if it's a temp directory
+if [[ -z "${PKI_STATE_DIR:-}" ]]; then
+  PKI_STATE_DIR="$(mktemp -d)"
+  # Use lifecycle management from bash-helpers to ensure cleanup
+  add_cleanup_item "${PKI_STATE_DIR}"
+else
+  PKI_STATE_DIR="${PKI_STATE_DIR}"
+fi
 
-# Print warning message.
-# Arguments:
-#   $1: Warning message
-warn() {
-  echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')] ${SCRIPT_NAME}: WARNING: $*" >&2
-}
-
-# Print info message.
-# Arguments:
-#   $1: Info message
-info() {
-  echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')] ${SCRIPT_NAME}: $*"
-}
+# The bash-helpers library provides these functions:
+# - log() for INFO level messages
+# - warn() for WARNING level messages  
+# - error() for ERROR level messages
+# - debug() for DEBUG level messages
+# - die() for fatal errors that exit the script
 
 # Display current configuration.
 show_configuration() {
-  info "Configuration:"
-  info "  PLAYBOOK_FILE:        ${PLAYBOOK_FILE}"
-  info "  CA_TREE_FILE:         ${CA_TREE_FILE}"
-  info "  CERTIFICATES_FILE:    ${CERTIFICATES_FILE}"
-  info "  ARTIFACTS_DIRECTORY:  ${ARTIFACTS_DIRECTORY}"
-  info "  PKI_STATE_DIR:        ${PKI_STATE_DIR}"
+  log "Configuration:"
+  log "  PLAYBOOK_FILE:        ${PLAYBOOK_FILE}"
+  log "  CA_TREE_FILE:         ${CA_TREE_FILE}"
+  log "  CERTIFICATES_FILE:    ${CERTIFICATES_FILE}"
+  log "  ARTIFACTS_DIRECTORY:  ${ARTIFACTS_DIRECTORY}"
+  log "  PKI_STATE_DIR:        ${PKI_STATE_DIR}"
 }
 
 # Check if required configuration files exist and set up defaults if needed.
@@ -76,29 +75,23 @@ check_configuration_files() {
   # Check if playbook.yaml exists, create symlink to default if missing or empty
   if [[ ! -f "${PLAYBOOK_FILE}" || ! -s "${PLAYBOOK_FILE}" ]]; then
     warn "playbook.yaml not found or empty - using default playbook"
-    info "To use a custom playbook, mount it as ${PLAYBOOK_FILE} in the container"
+    log "To use a custom playbook, mount it as ${PLAYBOOK_FILE} in the container"
     ln -sf "${DEFAULT_PLAYBOOK}" "${PLAYBOOK_FILE}"
   fi
 
   # Check for required CA tree configuration
   if [[ ! -f "${CA_TREE_FILE}" ]]; then
-    err "${CA_TREE_FILE} not found"
-    err "Please mount your CA hierarchy configuration as ${CA_TREE_FILE} in the container"
-    exit 1
+    die 1 "${CA_TREE_FILE} not found. Please mount your CA hierarchy configuration as ${CA_TREE_FILE} in the container"
   fi
 
   # Check for required certificates configuration
   if [[ ! -f "${CERTIFICATES_FILE}" ]]; then
-    err "${CERTIFICATES_FILE} not found"
-    err "Please mount your certificate definitions as ${CERTIFICATES_FILE} in the container"
-    exit 1
+    die 1 "${CERTIFICATES_FILE} not found. Please mount your certificate definitions as ${CERTIFICATES_FILE} in the container"
   fi
 
   # Check for the state snapshots' directory
   if [[ ! -d "${PKI_STATE_DIR}" ]]; then
-    err "${PKI_STATE_DIR} not found"
-    err "Please mount your state snapshots' directory as ${PKI_STATE_DIR} in the container or unset the PKI_STATE_DIR variable"
-    exit 1
+    die 1 "${PKI_STATE_DIR} not found. Please mount your state snapshots' directory as ${PKI_STATE_DIR} in the container or unset the PKI_STATE_DIR variable"
   fi
 }
 
@@ -113,7 +106,7 @@ dump_pki_state() {
   local dir
   local parent_dir
 
-  info "Dumping PKI state: ${description}"
+  log "Dumping PKI state: ${description}"
 
   # Determine PKI root directory (use ARTIFACTS_DIRECTORY first, then look for common locations)
   if [[ -d "${ARTIFACTS_DIRECTORY}" ]]; then
@@ -130,7 +123,7 @@ dump_pki_state() {
   fi
 
   if [[ -n "${pki_root_dir}" && -d "${pki_root_dir}" ]]; then
-    info "Found PKI directory: ${pki_root_dir}"
+    log "Found PKI directory: ${pki_root_dir}"
     if ! python3 "${STATE_DUMP_SCRIPT}" "${pki_root_dir}" -o "${output_file}" 2>/dev/null; then
       warn "Failed to dump PKI state from ${pki_root_dir}"
       echo '{"authorities": {}}' > "${output_file}"
@@ -180,11 +173,11 @@ run_ansible_with_state_tracking() {
   dump_pki_state "${old_state}" "before Ansible execution"
 
   echo ""
-  info "Running Ansible playbook..."
+  log "Running Ansible playbook..."
   ansible-playbook "${PLAYBOOK_FILE}"
 
   echo ""
-  info "Ansible playbook completed."
+  log "Ansible playbook completed."
 
   # Dump PKI state after running Ansible
   dump_pki_state "${new_state}" "after Ansible execution"

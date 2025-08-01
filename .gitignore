@@ -1,2 +1,38 @@
 *.pyc
 .idea/
+
+# Ansible Galaxy archives
+khmarochos-pki-*.tar.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ansible
+*.retry
+
+# Test coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

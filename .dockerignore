@@ -1,5 +1,6 @@
-# Git
+# Git (but keep .git for submodules)
 .git
+!scripts/lib/**/.git
 .gitignore
 .gitattributes
 
@@ -15,8 +16,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python libs (but not scripts/lib/)
+/lib/
+/lib64/
 parts/
 sdist/
 var/

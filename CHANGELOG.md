@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.5] - 2025-01-31
+
+### Added
+- Integrated bash-helpers library as a git submodule for improved logging
+- Lifecycle management for automatic cleanup of temporary resources
+- Docker build validation to ensure bash-helpers submodule is present
+- DOCKER_BUILD.md documentation for proper build process
+
+### Changed
+- Refactored docker-entrypoint.sh to use bash-helpers logging functions
+- Updated .dockerignore to properly include scripts/lib directory
+- Enhanced error handling with die() function from bash-helpers
+
+### Fixed
+- Fixed playbook_simple.yaml syntax error (missing task list item marker)
+
 ## [0.0.4] - 2025-01-30
 
 ### Added

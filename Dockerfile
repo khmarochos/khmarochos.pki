@@ -2,7 +2,7 @@ FROM python:3.12-slim
 
 LABEL maintainer="Volodymyr Melnyk <volodymyr@melnyk.host>"
 LABEL description="khmarochos.pki - PKI management tool with Ansible"
-LABEL version="0.0.4"
+LABEL version="0.0.5"
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -33,6 +33,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the collection and scripts
 COPY collections/ /app/collections/
 COPY scripts/ /app/scripts/
+
+# Ensure bash-helpers submodule is included
+# The build will fail if the submodule is not initialized
+RUN test -d /app/scripts/lib/bash-helpers/lib || \
+    (echo "ERROR: bash-helpers submodule not found!" && \
+     echo "Please run 'git submodule update --init --recursive' before building" && \
+     exit 1)
 
 # Copy the default playbook
 COPY playbook.yaml /app/playbook-default.yaml
